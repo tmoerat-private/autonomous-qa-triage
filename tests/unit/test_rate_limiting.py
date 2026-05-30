@@ -11,12 +11,15 @@ Key behaviour under test:
 """
 from __future__ import annotations
 
+from collections.abc import AsyncGenerator
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.app import create_app
+from src.db.session import get_db_session
 
 # ---------------------------------------------------------------------------
 # Helpers — build mock Redis pipelines with configurable cardinality result
@@ -60,8 +63,21 @@ def _make_redis_error_mock(exc: Exception):
 
 @pytest.fixture
 async def rate_limit_client():
-    """An AsyncClient wrapping a freshly created app instance."""
+    """An AsyncClient wrapping a freshly created app instance.
+
+    The database dependency is overridden with a MagicMock so these unit
+    tests exercise only the middleware layer without needing real DB tables.
+    """
     app = create_app()
+
+    # Override the DB session so requests to data-backed routes (e.g.
+    # /api/v1/failures) don't attempt real SQL queries.  The middleware
+    # tests only care about HTTP status codes, not response bodies.
+    async def _mock_db() -> AsyncGenerator[AsyncSession, None]:
+        yield MagicMock(spec=AsyncSession)
+
+    app.dependency_overrides[get_db_session] = _mock_db
+
     async with AsyncClient(
         transport=ASGITransport(app=app),
         base_url="http://test",
