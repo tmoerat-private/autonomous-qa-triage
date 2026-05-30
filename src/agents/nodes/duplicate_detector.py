@@ -79,9 +79,53 @@ async def duplicate_detector_node(state: TriageState) -> dict:
                 # best-effort for vector similarity only.
                 await session.commit()
 
+                if is_dup:
+                    if first_duplicate_id is None:
+                        any_duplicate = True
+                        first_duplicate_id = str(sig.id)
+                    log.info(
+                        "duplicate_detector.exact_match_found",
+                        failure_id=failure_id,
+                        sig_hash=sig_hash,
+                        duplicate_of_id=str(sig.id),
+                    )
+                    # Exact duplicate found — no Phase 2 search needed.
+                    # Still store/backfill the embedding in Qdrant (best-effort)
+                    # in case it was missed on the original insertion.
+                    try:
+                        await store_error_embedding(
+                            point_id=str(sig.id),
+                            error_text=normalized,
+                            payload={
+                                "signature_hash": sig_hash,
+                                "normalized_error": normalized[:500],
+                            },
+                        )
+                        await ErrorSignatureRepository().update_embedding_id(
+                            session, sig, str(sig.id)
+                        )
+                        await session.commit()
+                    except Exception as embed_exc:
+                        log.warning(
+                            "duplicate_detector.embedding_failed",
+                            failure_id=failure_id,
+                            error=str(embed_exc),
+                        )
+                    continue
+
+                # --- Phase 2: vector similarity search BEFORE storing embedding ---
+                # Searching first prevents self-matching: if we stored the embedding
+                # and then searched, the newly-inserted point would be returned with
+                # similarity 1.0 and incorrectly flagged as a duplicate.
+                similar = await find_similar_errors(
+                    error_text=normalized,
+                    score_threshold=settings.similarity_threshold,
+                )
+
                 # --- Phase 1b: Qdrant embedding (best-effort) ---
-                # If Qdrant is unavailable, log and continue — the hash-based
-                # duplicate detection above already persisted.
+                # Store after searching so the current point is never part of its
+                # own candidate set.  If Qdrant is unavailable, log and continue —
+                # the hash-based duplicate detection above already persisted.
                 try:
                     await store_error_embedding(
                         point_id=str(sig.id),
@@ -101,25 +145,6 @@ async def duplicate_detector_node(state: TriageState) -> dict:
                         failure_id=failure_id,
                         error=str(embed_exc),
                     )
-
-                if is_dup:
-                    if first_duplicate_id is None:
-                        any_duplicate = True
-                        first_duplicate_id = str(sig.id)
-                    log.info(
-                        "duplicate_detector.exact_match_found",
-                        failure_id=failure_id,
-                        sig_hash=sig_hash,
-                        duplicate_of_id=str(sig.id),
-                    )
-                    # Exact duplicate found — no need for vector search on this failure.
-                    continue
-
-                # --- Phase 2: vector similarity search (new signature only) ---
-                similar = await find_similar_errors(
-                    error_text=normalized,
-                    score_threshold=settings.similarity_threshold,
-                )
 
                 if similar:
                     top = similar[0]

@@ -74,7 +74,14 @@ async def rate_limit_client():
     # /api/v1/failures) don't attempt real SQL queries.  The middleware
     # tests only care about HTTP status codes, not response bodies.
     async def _mock_db() -> AsyncGenerator[AsyncSession, None]:
-        yield MagicMock(spec=AsyncSession)
+        session = AsyncMock()
+        execute_result = MagicMock()
+        execute_result.scalars.return_value.all.return_value = []
+        execute_result.scalar_one_or_none.return_value = None
+        execute_result.scalar_one.return_value = 0
+        execute_result.scalar.return_value = 0
+        session.execute.return_value = execute_result
+        yield session
 
     app.dependency_overrides[get_db_session] = _mock_db
 
