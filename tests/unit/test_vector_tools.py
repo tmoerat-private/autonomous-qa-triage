@@ -5,9 +5,7 @@ is ever instantiated — both are patched at the module boundary.
 """
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, MagicMock, patch
-
-import pytest
+from unittest.mock import AsyncMock, patch
 
 from src.agents.tools.vector_tools import (
     find_similar_errors,

@@ -64,7 +64,7 @@ class BaseCIClient(ABC):
             logs = await client.get_build_logs("my-job", 42)
     """
 
-    def __init__(self, settings) -> None:  # noqa: ANN001
+    def __init__(self, settings) -> None:
         self.settings = settings
         self._client: httpx.AsyncClient | None = None
 
@@ -72,7 +72,7 @@ class BaseCIClient(ABC):
         self._client = httpx.AsyncClient(timeout=30.0)
         return self
 
-    async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:  # noqa: ANN001
+    async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
         if self._client is not None:
             await self._client.aclose()
             self._client = None

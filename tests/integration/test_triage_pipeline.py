@@ -4,7 +4,6 @@ from __future__ import annotations
 from contextlib import asynccontextmanager
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import pytest
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -15,7 +14,6 @@ from src.models.failure_classification import FailureClassification
 from src.models.pipeline_event import PipelineEvent
 from src.models.test_failure import TestFailure
 from src.services.triage_service import run_triage
-
 
 # ---------------------------------------------------------------------------
 # Helpers

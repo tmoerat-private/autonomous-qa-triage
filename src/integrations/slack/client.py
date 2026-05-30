@@ -33,7 +33,7 @@ class SlackClient:
         )
     """
 
-    def __init__(self, settings) -> None:  # noqa: ANN001
+    def __init__(self, settings) -> None:
         self._settings = settings
 
     @retry(

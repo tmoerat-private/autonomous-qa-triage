@@ -1,7 +1,6 @@
 """Tests for ticket_creator_node() — mocked JiraClient, real test DB."""
 from __future__ import annotations
 
-import uuid
 from contextlib import asynccontextmanager
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -13,7 +12,6 @@ from src.db.repositories.ticket_repo import TicketRepository
 from src.models.failure_classification import FailureClassification
 from src.models.pipeline_event import PipelineEvent
 from src.models.test_failure import TestFailure
-
 
 # ---------------------------------------------------------------------------
 # Helpers (mirror pattern from test_failure_classifier.py)

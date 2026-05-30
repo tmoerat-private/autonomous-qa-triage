@@ -11,14 +11,12 @@ Key behaviour under test:
 """
 from __future__ import annotations
 
-from contextlib import asynccontextmanager
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from httpx import ASGITransport, AsyncClient
 
 from src.api.app import create_app
-
 
 # ---------------------------------------------------------------------------
 # Helpers — build mock Redis pipelines with configurable cardinality result

@@ -5,7 +5,6 @@ import uuid
 from contextlib import asynccontextmanager
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.agents.nodes.failure_classifier import ClassificationResult, failure_classifier_node
@@ -14,7 +13,6 @@ from src.db.repositories.classification_repo import ClassificationRepository
 from src.db.repositories.failure_repo import FailureRepository
 from src.models.pipeline_event import PipelineEvent
 from src.models.test_failure import TestFailure
-
 
 # ---------------------------------------------------------------------------
 # Helpers

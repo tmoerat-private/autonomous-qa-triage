@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import structlog
 
@@ -97,7 +97,7 @@ async def notifier_node(state: TriageState) -> dict:
                     recipient=channel_id,
                     message_type="triage_result",
                     external_message_id=external_message_id,
-                    sent_at=datetime.now(timezone.utc),
+                    sent_at=datetime.now(UTC),
                 )
                 await session.commit()
 

@@ -12,10 +12,8 @@ from src.db.repositories.pipeline_repo import PipelineEventRepository
 from src.db.session import get_session_factory
 from src.integrations.github_actions.client import GitHubActionsClient
 from src.integrations.github_actions.parser import GitHubActionsParser
-from src.integrations.github_actions.webhook_handler import GitHubActionsWebhookHandler
 from src.integrations.jenkins.client import JenkinsClient
 from src.integrations.jenkins.parser import JenkinsParser
-from src.integrations.jenkins.webhook_handler import JenkinsWebhookHandler
 from src.schemas.webhook_payloads import GitHubActionsWebhookPayload, JenkinsWebhookPayload
 
 logger = structlog.get_logger(__name__)

@@ -20,7 +20,6 @@ from src.models.test_failure import TestFailure
 from src.models.triage_ticket import TriageTicket
 from src.services.triage_service import run_triage
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -190,7 +189,7 @@ async def test_full_pipeline_non_duplicate(db_session: AsyncSession):
     event = await _insert_pipeline_event(db_session)
     failure = await _insert_failure(db_session, event.id)
 
-    session_factory = _make_session_factory(db_session)
+    _session_factory = _make_session_factory(db_session)
 
     async def stub_pipeline_monitor(state: TriageState) -> dict:
         return {
@@ -268,7 +267,7 @@ async def test_full_pipeline_duplicate_skips_ticket(db_session: AsyncSession):
     event2 = await _insert_pipeline_event(db_session)
     failure2 = await _insert_failure(db_session, event2.id, error_message=same_error, stack_trace=same_trace)
 
-    session_factory = _make_session_factory(db_session)
+    _session_factory = _make_session_factory(db_session)
     classifier_mock = _make_classifier_mock()
     ticket_settings = _make_ticket_settings()
     notifier_settings = _make_notifier_settings()
@@ -354,7 +353,7 @@ async def test_full_pipeline_jira_down_still_notifies(db_session: AsyncSession):
     event = await _insert_pipeline_event(db_session)
     failure = await _insert_failure(db_session, event.id)
 
-    session_factory = _make_session_factory(db_session)
+    _session_factory = _make_session_factory(db_session)
 
     async def stub_pipeline_monitor(state: TriageState) -> dict:
         return {

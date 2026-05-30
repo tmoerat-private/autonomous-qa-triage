@@ -26,4 +26,4 @@ def run_triage_pipeline(self, pipeline_event_id: str) -> dict:
     except Exception as exc:
         log.warning("triage_pipeline.failed", error=str(exc))
         TRIAGE_COMPLETED.labels(status="failed").inc()
-        raise self.retry(exc=exc, countdown=60 * (2 ** self.request.retries))
+        raise self.retry(exc=exc, countdown=60 * (2 ** self.request.retries)) from exc

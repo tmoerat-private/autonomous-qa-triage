@@ -10,11 +10,8 @@ import uuid
 from contextlib import asynccontextmanager
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import pytest
-
 from src.agents.nodes.duplicate_detector import duplicate_detector_node
 from src.agents.state import initial_state
-
 
 # ---------------------------------------------------------------------------
 # Shared constants

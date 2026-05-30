@@ -5,7 +5,7 @@ pipeline event and assigns a composite flakiness score.  Tests whose score
 meets or exceeds settings.flaky_score_threshold are flagged as flaky so the
 orchestrator can skip ticket creation and route them straight to the notifier.
 
-Score formula (each component is 0.0–1.0):
+Score formula (each component is 0.0-1.0):
   failure_rate_score = 1.0 if flaky_min <= failure_rate <= flaky_max else 0.0
   retry_score        = min(retry_rate * 2, 1.0)   # high retry rate ≈ flaky
   flakiness_score    = 0.6 * failure_rate_score + 0.4 * retry_score

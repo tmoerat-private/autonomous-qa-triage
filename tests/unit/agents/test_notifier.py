@@ -12,7 +12,6 @@ from src.db.repositories.notification_repo import NotificationRepository
 from src.models.pipeline_event import PipelineEvent
 from src.models.test_failure import TestFailure
 
-
 # ---------------------------------------------------------------------------
 # Helpers (mirror pattern from test_failure_classifier.py)
 # ---------------------------------------------------------------------------

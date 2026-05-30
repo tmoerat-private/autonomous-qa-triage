@@ -4,7 +4,6 @@ from __future__ import annotations
 from src.agents.orchestrator import build_triage_graph, triage_graph
 from src.agents.state import initial_state
 
-
 # ---------------------------------------------------------------------------
 # Graph construction
 # ---------------------------------------------------------------------------

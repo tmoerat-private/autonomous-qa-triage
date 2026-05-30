@@ -73,7 +73,7 @@ class JenkinsParser:
 
         try:
             return self._parse(console_log)
-        except Exception:  # noqa: BLE001
+        except Exception:
             logger.warning(
                 "jenkins.parser.parse_failures.unexpected_error",
                 exc_info=True,

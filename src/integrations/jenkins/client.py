@@ -40,7 +40,7 @@ class JenkinsClient(BaseCIClient):
             logs = await client.get_build_logs_for("my-job", 42)
     """
 
-    def __init__(self, settings) -> None:  # noqa: ANN001
+    def __init__(self, settings) -> None:
         super().__init__(settings)
 
     # ------------------------------------------------------------------

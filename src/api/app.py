@@ -39,7 +39,8 @@ def create_app() -> FastAPI:
     # wrapper and therefore the first to run on each incoming request.
     #
     # Execution order (request in → response out):
-    #   RateLimitMiddleware → CORSMiddleware → RequestIdMiddleware → LoggingMiddleware → route handler
+    #   RateLimitMiddleware → CORSMiddleware → RequestIdMiddleware → LoggingMiddleware →
+    #   route handler
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["*"],

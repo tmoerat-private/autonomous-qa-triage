@@ -9,11 +9,11 @@ from pydantic import BaseModel, Field
 
 from src.agents.prompts.classifier_prompt import CLASSIFIER_SYSTEM_PROMPT
 from src.agents.state import TriageState
-from src.observability.metrics import CLASSIFICATION_DISTRIBUTION
 from src.config.settings import get_settings
 from src.db.repositories.classification_repo import ClassificationRepository
 from src.db.repositories.failure_repo import FailureRepository
 from src.db.session import get_session_factory
+from src.observability.metrics import CLASSIFICATION_DISTRIBUTION
 
 logger = structlog.get_logger(__name__)
 

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import structlog
 from sqlalchemy import select
@@ -59,7 +59,7 @@ class ErrorSignatureRepository:
         The caller controls the transaction; this method only flushes.
         """
         signature.occurrence_count += 1
-        signature.last_seen_at = datetime.now(timezone.utc)
+        signature.last_seen_at = datetime.now(UTC)
         await session.flush()
         logger.info(
             "error_signature.occurrence_incremented",

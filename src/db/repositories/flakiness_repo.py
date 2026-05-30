@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import structlog
 from sqlalchemy import and_, distinct, func, select
@@ -31,7 +31,7 @@ class FlakynessRepository:
         Joins test_failures to pipeline_events and counts distinct pipeline event IDs.
         If repository is provided it is used as an additional filter.
         """
-        since = datetime.now(timezone.utc) - timedelta(days=lookback_days)
+        since = datetime.now(UTC) - timedelta(days=lookback_days)
 
         conditions = [
             TestFailure.test_name == test_name,
@@ -67,7 +67,7 @@ class FlakynessRepository:
 
         If repository is provided it is used as an additional filter.
         """
-        since = datetime.now(timezone.utc) - timedelta(days=lookback_days)
+        since = datetime.now(UTC) - timedelta(days=lookback_days)
 
         conditions: list = [PipelineEvent.created_at >= since]
         if repository is not None:
@@ -95,7 +95,7 @@ class FlakynessRepository:
 
         Returns 0.0 if no failures are found in the window.
         """
-        since = datetime.now(timezone.utc) - timedelta(days=lookback_days)
+        since = datetime.now(UTC) - timedelta(days=lookback_days)
 
         base_conditions = [
             TestFailure.test_name == test_name,
@@ -153,7 +153,7 @@ class FlakynessRepository:
           failure_id (str UUID), pipeline_event_id (str UUID),
           repository (str | None), created_at (datetime), retry_count (int).
         """
-        since = datetime.now(timezone.utc) - timedelta(days=lookback_days)
+        since = datetime.now(UTC) - timedelta(days=lookback_days)
 
         conditions = [
             TestFailure.test_name == test_name,

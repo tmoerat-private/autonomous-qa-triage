@@ -28,7 +28,7 @@ class JiraClient:
             )
     """
 
-    def __init__(self, settings) -> None:  # noqa: ANN001
+    def __init__(self, settings) -> None:
         self._settings = settings
         self._client: httpx.AsyncClient | None = None
 

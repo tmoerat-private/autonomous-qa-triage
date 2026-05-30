@@ -80,7 +80,7 @@ async def find_similar_errors(
     Args:
         error_text: The error text to search for similar matches against.
         limit: Maximum number of results to return.
-        score_threshold: Minimum cosine similarity score (0.0–1.0) for a
+        score_threshold: Minimum cosine similarity score (0.0-1.0) for a
             result to be included.
 
     Returns:

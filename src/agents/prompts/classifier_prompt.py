@@ -32,11 +32,11 @@ broker, cache) was unavailable or returned an unexpected error during the test r
 Respond with:
 - category: one of the seven values above (snake_case, lowercase)
 - confidence: a float from 0.0 to 1.0
-  - 0.9–1.0 = unambiguous evidence for one category
-  - 0.7–0.89 = strong indicators but some ambiguity
-  - 0.5–0.69 = plausible classification, notable uncertainty
+  - 0.9-1.0 = unambiguous evidence for one category
+  - 0.7-0.89 = strong indicators but some ambiguity
+  - 0.5-0.69 = plausible classification, notable uncertainty
   - below 0.5 = very uncertain; prefer a broader category
-- reasoning: 1–2 sentences explaining the key evidence that drove this classification
+- reasoning: 1-2 sentences explaining the key evidence that drove this classification
 
 ## Few-Shot Examples
 

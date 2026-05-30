@@ -8,16 +8,15 @@ for real.
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-from src.config.constants import FailureCategory, FailureStatus
+from src.config.constants import FailureStatus
 from src.models.failure_classification import FailureClassification
 from src.models.triage_ticket import TriageTicket
 from tests.factories import PipelineEventFactory, TestFailureFactory
-
 
 # ---------------------------------------------------------------------------
 # Module-level autouse — no real Celery calls in any test in this module
@@ -163,7 +162,7 @@ async def test_list_failures_category_filter_requires_classification_join(client
     """?category=product_bug returns only failures that have a matching classification."""
     event = await _seed_pipeline_event(db_session)
     failure_with_class = await _seed_failure(db_session, pipeline_event=event)
-    failure_no_class = await _seed_failure(db_session, pipeline_event=event)  # noqa: F841
+    failure_no_class = await _seed_failure(db_session, pipeline_event=event)
     await _seed_classification(db_session, failure_with_class, category="product_bug")
 
     response = await client.get("/api/v1/failures", params={"category": "product_bug"})
@@ -203,7 +202,7 @@ async def test_list_failures_repository_filter_matches_pipeline_event(client, db
     event_a = await _seed_pipeline_event(db_session, repository="org/service-a")
     event_b = await _seed_pipeline_event(db_session, repository="org/service-b")
     failure_a = await _seed_failure(db_session, pipeline_event=event_a)
-    failure_b = await _seed_failure(db_session, pipeline_event=event_b)  # noqa: F841
+    failure_b = await _seed_failure(db_session, pipeline_event=event_b)
 
     response = await client.get("/api/v1/failures", params={"repository": "org/service-a"})
 
@@ -219,7 +218,7 @@ async def test_list_failures_branch_filter_matches_pipeline_event(client, db_ses
     """?branch=feature/x returns only failures from that branch."""
     event_main = await _seed_pipeline_event(db_session, branch="main")
     event_feat = await _seed_pipeline_event(db_session, branch="feature/x")
-    failure_main = await _seed_failure(db_session, pipeline_event=event_main)  # noqa: F841
+    failure_main = await _seed_failure(db_session, pipeline_event=event_main)
     failure_feat = await _seed_failure(db_session, pipeline_event=event_feat)
 
     response = await client.get("/api/v1/failures", params={"branch": "feature/x"})
@@ -241,7 +240,7 @@ async def test_list_failures_combined_repository_and_branch_filter(client, db_se
         db_session, repository="org/repo", branch="develop"
     )
     failure_match = await _seed_failure(db_session, pipeline_event=event_match)
-    failure_wrong = await _seed_failure(db_session, pipeline_event=event_wrong_branch)  # noqa: F841
+    failure_wrong = await _seed_failure(db_session, pipeline_event=event_wrong_branch)
 
     response = await client.get(
         "/api/v1/failures", params={"repository": "org/repo", "branch": "main"}
@@ -263,6 +262,7 @@ async def test_list_failures_combined_repository_and_branch_filter(client, db_se
 async def test_list_failures_date_from_filter_excludes_older_records(client, db_session):
     """?date_from=T excludes failures created before T."""
     from sqlalchemy import update
+
     from src.models.test_failure import TestFailure
 
     event = await _seed_pipeline_event(db_session)
@@ -270,7 +270,7 @@ async def test_list_failures_date_from_filter_excludes_older_records(client, db_
     new_failure = await _seed_failure(db_session, pipeline_event=event)
 
     # Force the old failure's created_at to 10 days ago via a direct update
-    old_ts = datetime.now(tz=timezone.utc) - timedelta(days=10)
+    old_ts = datetime.now(tz=UTC) - timedelta(days=10)
     await db_session.execute(
         update(TestFailure)
         .where(TestFailure.id == old_failure.id)
@@ -279,7 +279,7 @@ async def test_list_failures_date_from_filter_excludes_older_records(client, db_
     await db_session.flush()
 
     # Filter from 2 days ago — should exclude the 10-day-old record
-    cutoff = (datetime.now(tz=timezone.utc) - timedelta(days=2)).isoformat()
+    cutoff = (datetime.now(tz=UTC) - timedelta(days=2)).isoformat()
     response = await client.get("/api/v1/failures", params={"date_from": cutoff})
 
     assert response.status_code == 200
@@ -293,13 +293,14 @@ async def test_list_failures_date_from_filter_excludes_older_records(client, db_
 async def test_list_failures_date_to_filter_excludes_newer_records(client, db_session):
     """?date_to=T excludes failures created after T."""
     from sqlalchemy import update
+
     from src.models.test_failure import TestFailure
 
     event = await _seed_pipeline_event(db_session)
     old_failure = await _seed_failure(db_session, pipeline_event=event)
-    new_failure = await _seed_failure(db_session, pipeline_event=event)  # noqa: F841
+    new_failure = await _seed_failure(db_session, pipeline_event=event)
 
-    old_ts = datetime.now(tz=timezone.utc) - timedelta(days=10)
+    old_ts = datetime.now(tz=UTC) - timedelta(days=10)
     await db_session.execute(
         update(TestFailure)
         .where(TestFailure.id == old_failure.id)
@@ -308,7 +309,7 @@ async def test_list_failures_date_to_filter_excludes_newer_records(client, db_se
     await db_session.flush()
 
     # Filter up to 5 days ago — only the old record fits
-    cutoff = (datetime.now(tz=timezone.utc) - timedelta(days=5)).isoformat()
+    cutoff = (datetime.now(tz=UTC) - timedelta(days=5)).isoformat()
     response = await client.get("/api/v1/failures", params={"date_to": cutoff})
 
     assert response.status_code == 200

@@ -26,7 +26,6 @@ import pytest
 from src.agents.nodes.flaky_detector import _compute_flakiness_score, flaky_detector_node
 from src.agents.state import initial_state
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------

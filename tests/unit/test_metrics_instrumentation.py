@@ -31,7 +31,6 @@ from src.observability.metrics import (
     TRIAGE_COMPLETED,
 )
 
-
 # ---------------------------------------------------------------------------
 # Helpers — read Prometheus counter label values safely
 # ---------------------------------------------------------------------------

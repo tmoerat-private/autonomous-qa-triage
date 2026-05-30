@@ -13,11 +13,8 @@ Graph introspection approach:
 """
 from __future__ import annotations
 
-import pytest
-
 from src.agents.orchestrator import build_triage_graph, route_after_dedup_and_flaky
 from src.agents.state import initial_state
-
 
 # ---------------------------------------------------------------------------
 # route_after_dedup_and_flaky — pure function, synchronous

@@ -8,14 +8,13 @@ transaction rollback (see conftest.py).
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 
 from src.config.constants import AgentRunStatus
 from src.models.agent_run import AgentRun
 from tests.factories import PipelineEventFactory, TestFailureFactory
-
 
 # ---------------------------------------------------------------------------
 # Helpers — build and persist domain objects
@@ -64,7 +63,7 @@ async def _seed_agent_run(
         output_summary=output_summary,
         duration_ms=duration_ms,
         tokens_used=tokens_used,
-        started_at=datetime.now(tz=timezone.utc),
+        started_at=datetime.now(tz=UTC),
         **kwargs,
     )
     db_session.add(run)
@@ -133,7 +132,7 @@ async def test_list_agent_runs_filter_by_test_failure_id(client, db_session):
     failure_a = await _seed_failure(db_session)
     failure_b = await _seed_failure(db_session)
     run_a = await _seed_agent_run(db_session, failure=failure_a)
-    run_b = await _seed_agent_run(db_session, failure=failure_b)  # noqa: F841
+    run_b = await _seed_agent_run(db_session, failure=failure_b)
 
     response = await client.get(
         "/api/v1/agent-runs", params={"test_failure_id": str(failure_a.id)}
@@ -190,7 +189,7 @@ async def test_list_agent_runs_filter_by_agent_name(client, db_session):
     classifier_run = await _seed_agent_run(
         db_session, failure=failure, agent_name="failure_classifier"
     )
-    analyzer_run = await _seed_agent_run(  # noqa: F841
+    analyzer_run = await _seed_agent_run(
         db_session, failure=failure, agent_name="log_analyzer"
     )
 

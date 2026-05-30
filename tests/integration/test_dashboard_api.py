@@ -9,7 +9,7 @@ transaction rollback (see conftest.py).
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from sqlalchemy import update
@@ -18,7 +18,6 @@ from src.config.constants import FailureStatus
 from src.models.failure_classification import FailureClassification
 from src.models.test_failure import TestFailure
 from tests.factories import PipelineEventFactory, TestFailureFactory
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -61,7 +60,7 @@ async def _seed_classification(db_session, failure, category="product_bug"):
 
 async def _age_failure(db_session, failure, days_ago: int):
     """Backdate a failure's created_at timestamp by `days_ago` days."""
-    old_ts = datetime.now(tz=timezone.utc) - timedelta(days=days_ago)
+    old_ts = datetime.now(tz=UTC) - timedelta(days=days_ago)
     await db_session.execute(
         update(TestFailure)
         .where(TestFailure.id == failure.id)
@@ -351,7 +350,7 @@ async def test_trends_count_reflects_failures_on_correct_day(client, db_session)
 
     assert response.status_code == 200
     entries = response.json()
-    today_str = datetime.now(tz=timezone.utc).strftime("%Y-%m-%d")
+    today_str = datetime.now(tz=UTC).strftime("%Y-%m-%d")
     today_entry = next((e for e in entries if e["date"] == today_str), None)
     assert today_entry is not None
     assert today_entry["count"] >= 1
@@ -364,5 +363,5 @@ async def test_trends_last_entry_is_today(client, db_session):
 
     assert response.status_code == 200
     entries = response.json()
-    today_str = datetime.now(tz=timezone.utc).strftime("%Y-%m-%d")
+    today_str = datetime.now(tz=UTC).strftime("%Y-%m-%d")
     assert entries[-1]["date"] == today_str

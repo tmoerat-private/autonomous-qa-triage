@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import hashlib
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 import structlog
@@ -176,7 +176,7 @@ async def get_dashboard_summary(db: AsyncSession, period: str) -> dict:
     """
     period_hours = {"24h": 24, "7d": 7 * 24, "30d": 30 * 24}
     hours = period_hours.get(period, 7 * 24)
-    since = datetime.now(tz=timezone.utc) - timedelta(hours=hours)
+    since = datetime.now(tz=UTC) - timedelta(hours=hours)
 
     status_stmt = (
         select(TestFailure.status, func.count().label("cnt"))
@@ -219,7 +219,7 @@ async def get_top_failing_tests(
 
     Returns a list of dicts with keys: test_name, count.
     """
-    since = datetime.now(tz=timezone.utc) - timedelta(days=days)
+    since = datetime.now(tz=UTC) - timedelta(days=days)
 
     stmt = (
         select(TestFailure.test_name, func.count().label("cnt"))
@@ -247,7 +247,7 @@ async def get_daily_trends(db: AsyncSession, days: int) -> list[dict]:
     contiguous series. Returns a list of dicts with keys: date (YYYY-MM-DD),
     count.
     """
-    since = datetime.now(tz=timezone.utc) - timedelta(days=days)
+    since = datetime.now(tz=UTC) - timedelta(days=days)
 
     stmt = (
         select(
@@ -262,7 +262,7 @@ async def get_daily_trends(db: AsyncSession, days: int) -> list[dict]:
     db_rows: dict[str, int] = {str(row.day): row.cnt for row in result}
 
     # Build a contiguous date series, filling gaps with 0
-    today = datetime.now(tz=timezone.utc).date()
+    today = datetime.now(tz=UTC).date()
     trends: list[dict] = []
     for i in range(days, 0, -1):
         day = today - timedelta(days=i - 1)

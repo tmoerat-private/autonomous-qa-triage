@@ -38,7 +38,7 @@ class GitHubActionsClient(BaseCIClient):
     once the PAT approach is retired.
     """
 
-    def __init__(self, settings) -> None:  # noqa: ANN001
+    def __init__(self, settings) -> None:
         super().__init__(settings)
         self._headers: dict[str, str] = {
             "Authorization": f"token {settings.github_app_id}",

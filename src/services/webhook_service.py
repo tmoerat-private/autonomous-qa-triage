@@ -59,7 +59,7 @@ class WebhookService:
             normalized = handler.parse(payload_dict)
         except ValueError as exc:
             log.warning("webhook.parse_error", error=str(exc))
-            raise HTTPException(status_code=422, detail=str(exc))
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
 
         # 4. Persist to DB
         pipeline_event = await self.pipeline_repo.create(

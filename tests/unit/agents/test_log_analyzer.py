@@ -5,7 +5,6 @@ import pytest
 
 from src.agents.nodes.log_analyzer import compute_signature, normalize_error
 
-
 # ---------------------------------------------------------------------------
 # normalize_error — individual normalization steps
 # ---------------------------------------------------------------------------
