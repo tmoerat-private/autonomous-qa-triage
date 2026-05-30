@@ -20,10 +20,11 @@ _HANDLERS: dict[str, BaseWebhookHandler] = {
 
 def _get_secret(provider: str) -> str:
     settings = get_settings()
-    return {
+    secrets: dict[str, str] = {
         CIProvider.JENKINS: settings.jenkins_webhook_secret,
         CIProvider.GITHUB_ACTIONS: settings.github_webhook_secret,
-    }.get(provider, "")
+    }
+    return secrets.get(provider, "")
 
 
 class WebhookService:

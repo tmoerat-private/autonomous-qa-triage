@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 from abc import ABC, abstractmethod
+from typing import Self
 
 import httpx
 
@@ -68,7 +69,7 @@ class BaseCIClient(ABC):
         self.settings = settings
         self._client: httpx.AsyncClient | None = None
 
-    async def __aenter__(self) -> BaseCIClient:
+    async def __aenter__(self) -> Self:
         self._client = httpx.AsyncClient(timeout=30.0)
         return self
 

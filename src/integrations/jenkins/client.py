@@ -16,13 +16,6 @@ logger = structlog.get_logger(__name__)
 
 _RETRY_EXCEPTIONS = (httpx.TransportError, httpx.TimeoutException)
 
-_RETRY = dict(
-    stop=stop_after_attempt(3),
-    wait=wait_exponential(multiplier=1, min=1, max=10),
-    retry=retry_if_exception_type(_RETRY_EXCEPTIONS),
-)
-
-
 class JenkinsClient(BaseCIClient):
     """Async Jenkins REST API client.
 
@@ -67,7 +60,11 @@ class JenkinsClient(BaseCIClient):
     # Concrete typed methods — the real public API
     # ------------------------------------------------------------------
 
-    @retry(**_RETRY)
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=1, max=10),
+        retry=retry_if_exception_type(_RETRY_EXCEPTIONS),
+    )
     async def get_build_details_for(
         self, job_name: str, build_number: int
     ) -> dict:
@@ -108,7 +105,11 @@ class JenkinsClient(BaseCIClient):
 
         return response.json()
 
-    @retry(**_RETRY)
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=1, max=10),
+        retry=retry_if_exception_type(_RETRY_EXCEPTIONS),
+    )
     async def get_build_logs_for(
         self, job_name: str, build_number: int
     ) -> str:

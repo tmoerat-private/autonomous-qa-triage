@@ -84,7 +84,7 @@ async def failure_classifier_node(state: TriageState) -> dict:
                     f"Stack trace:\n{(failure.stack_trace or '')[:2000]}"
                 )
 
-                result: ClassificationResult = await structured_llm.ainvoke(
+                result: ClassificationResult = await structured_llm.ainvoke(  # type: ignore[assignment]
                     [
                         SystemMessage(content=CLASSIFIER_SYSTEM_PROMPT),
                         HumanMessage(content=user_message),

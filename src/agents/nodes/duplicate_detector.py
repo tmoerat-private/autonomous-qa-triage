@@ -74,23 +74,33 @@ async def duplicate_detector_node(state: TriageState) -> dict:
                 sig, is_dup = await ErrorSignatureRepository().get_or_create(
                     session, sig_hash, normalized
                 )
-
-                # Always store the embedding for this signature in Qdrant and
-                # write the point ID back to the DB row so future vector searches
-                # can find it.  We do this for both new and existing signatures
-                # so that any signature lacking an embedding gets backfilled.
-                await store_error_embedding(
-                    point_id=str(sig.id),
-                    error_text=normalized,
-                    payload={
-                        "signature_hash": sig_hash,
-                        "normalized_error": normalized[:500],
-                    },
-                )
-                await ErrorSignatureRepository().update_embedding_id(
-                    session, sig, str(sig.id)
-                )
+                # Commit the signature to DB *before* touching Qdrant.
+                # PostgreSQL is the authoritative dedup store; Qdrant is
+                # best-effort for vector similarity only.
                 await session.commit()
+
+                # --- Phase 1b: Qdrant embedding (best-effort) ---
+                # If Qdrant is unavailable, log and continue — the hash-based
+                # duplicate detection above already persisted.
+                try:
+                    await store_error_embedding(
+                        point_id=str(sig.id),
+                        error_text=normalized,
+                        payload={
+                            "signature_hash": sig_hash,
+                            "normalized_error": normalized[:500],
+                        },
+                    )
+                    await ErrorSignatureRepository().update_embedding_id(
+                        session, sig, str(sig.id)
+                    )
+                    await session.commit()
+                except Exception as embed_exc:
+                    log.warning(
+                        "duplicate_detector.embedding_failed",
+                        failure_id=failure_id,
+                        error=str(embed_exc),
+                    )
 
                 if is_dup:
                     if first_duplicate_id is None:

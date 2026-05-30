@@ -74,8 +74,8 @@ async def pipeline_monitor_node(state: TriageState) -> dict:
 
     elif provider == CIProvider.GITHUB_ACTIONS:
         try:
-            payload = GitHubActionsWebhookPayload.model_validate(raw_payload)
-            repo_full_name, run_id = GitHubActionsParser().extract_run_info(payload)
+            gh_payload = GitHubActionsWebhookPayload.model_validate(raw_payload)
+            repo_full_name, run_id = GitHubActionsParser().extract_run_info(gh_payload)
             async with GitHubActionsClient(settings) as client:
                 raw_logs = await client.get_build_logs(repo_full_name, run_id)
         except Exception as exc:

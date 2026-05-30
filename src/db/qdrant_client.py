@@ -49,16 +49,16 @@ class QdrantManager:
         Each dict has keys: id (str), score (float), payload (dict).
         Returns empty list if no matches meet the threshold.
         """
-        results = await self._client.search(
+        response = await self._client.query_points(
             collection_name=self._collection,
-            query_vector=query_vector,
+            query=query_vector,
             limit=limit,
             score_threshold=score_threshold,
             with_payload=True,
         )
         return [
             {"id": str(r.id), "score": r.score, "payload": r.payload or {}}
-            for r in results
+            for r in response.points
         ]
 
     async def delete_point(self, point_id: str) -> None:

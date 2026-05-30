@@ -61,18 +61,9 @@ class GitHubActionsClient(BaseCIClient):
     # __aexit__ is inherited from BaseCIClient and handles aclose() correctly.
 
     # ------------------------------------------------------------------
-    # Base-class abstract methods — not applicable for GitHub Actions
-    # (which requires both repo_full_name *and* run_id).
-    # ------------------------------------------------------------------
-
-    async def get_build_details(self, build_id: str) -> dict:  # type: ignore[override]
-        raise NotImplementedError("Use repo_full_name + run_id overloads")
-
-    async def get_build_logs(self, build_id: str) -> str:  # type: ignore[override]
-        raise NotImplementedError("Use repo_full_name + run_id overloads")
-
-    # ------------------------------------------------------------------
-    # Concrete typed overloads — the real public API
+    # Concrete typed methods — satisfy the base-class abstract contract
+    # by accepting a "repo::run_id" composite build_id for the single-arg
+    # variants; the preferred public API uses explicit keyword arguments.
     # ------------------------------------------------------------------
 
     @retry(
@@ -80,7 +71,7 @@ class GitHubActionsClient(BaseCIClient):
         wait=wait_exponential(multiplier=1, min=1, max=10),
         retry=retry_if_exception_type(_RETRY_EXCEPTIONS),
     )
-    async def get_build_details(  # type: ignore[override]  # noqa: F811
+    async def get_build_details(  # type: ignore[override]
         self,
         repo_full_name: str,
         run_id: int,
@@ -124,7 +115,7 @@ class GitHubActionsClient(BaseCIClient):
         wait=wait_exponential(multiplier=1, min=1, max=10),
         retry=retry_if_exception_type(_RETRY_EXCEPTIONS),
     )
-    async def get_build_logs(  # type: ignore[override]  # noqa: F811
+    async def get_build_logs(  # type: ignore[override]
         self,
         repo_full_name: str,
         run_id: int,

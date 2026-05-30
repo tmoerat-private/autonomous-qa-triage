@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from langgraph.graph import END, StateGraph
+from langgraph.graph.state import CompiledStateGraph
 
 from src.agents.nodes.duplicate_detector import duplicate_detector_node
 from src.agents.nodes.failure_classifier import failure_classifier_node
@@ -27,7 +28,7 @@ def route_after_dedup_and_flaky(state: TriageState) -> str:
     return "ticket_creator"
 
 
-def build_triage_graph() -> StateGraph:
+def build_triage_graph() -> CompiledStateGraph:
     """Construct and compile the Phase 2 LangGraph triage pipeline.
 
     Graph topology (Phase 2):

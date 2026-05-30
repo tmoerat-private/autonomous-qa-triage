@@ -48,7 +48,8 @@ class JiraClient:
         return self
 
     async def __aexit__(self, *args) -> None:
-        await self._client.aclose()
+        if self._client is not None:
+            await self._client.aclose()
 
     @property
     def client(self) -> httpx.AsyncClient:
