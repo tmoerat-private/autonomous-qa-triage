@@ -1,0 +1,91 @@
+from __future__ import annotations
+
+import uuid
+from datetime import datetime
+
+from pydantic import BaseModel, ConfigDict
+
+
+class FailureListItem(BaseModel):
+    """Subset of TestFailure fields returned in paginated list responses."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    test_name: str
+    test_suite: str | None
+    test_file: str | None
+    status: str
+    duration_ms: int | None
+    retry_count: int
+    pipeline_event_id: uuid.UUID
+    created_at: datetime
+    updated_at: datetime
+
+
+class PaginatedFailuresResponse(BaseModel):
+    """Paginated envelope for failure list results."""
+
+    items: list[FailureListItem]
+    total: int
+    limit: int
+    offset: int
+
+
+class ClassificationDetail(BaseModel):
+    """Nested classification block returned within FailureDetailResponse."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    category: str
+    confidence: float
+    reasoning: str | None
+    model_used: str | None
+    tokens_used: int | None
+    created_at: datetime
+
+
+class TicketDetail(BaseModel):
+    """Nested ticket block returned within FailureDetailResponse."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    provider: str
+    external_ticket_id: str | None
+    external_url: str | None
+    title: str | None
+    priority: str | None
+    status: str | None
+
+
+class FailureDetailResponse(BaseModel):
+    """Full failure record with nested classification, ticket, and error signature."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    test_name: str
+    test_suite: str | None
+    test_file: str | None
+    error_message: str | None
+    stack_trace: str | None
+    status: str
+    duration_ms: int | None
+    retry_count: int
+    pipeline_event_id: uuid.UUID
+    created_at: datetime
+    updated_at: datetime
+
+    # Nested objects — None when not yet created
+    classification: ClassificationDetail | None = None
+    ticket: TicketDetail | None = None
+    error_signature_hash: str | None = None
+
+
+class RetriegeResponse(BaseModel):
+    """Response returned when a fresh triage is enqueued for a failure."""
+
+    message: str
+    failure_id: str

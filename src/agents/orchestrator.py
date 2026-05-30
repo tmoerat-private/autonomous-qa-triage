@@ -1,0 +1,77 @@
+from __future__ import annotations
+
+from langgraph.graph import END, StateGraph
+
+from src.agents.nodes.duplicate_detector import duplicate_detector_node
+from src.agents.nodes.failure_classifier import failure_classifier_node
+from src.agents.nodes.flaky_detector import flaky_detector_node
+from src.agents.nodes.log_analyzer import log_analyzer_node
+from src.agents.nodes.notifier import notifier_node
+from src.agents.nodes.pipeline_monitor import pipeline_monitor_node
+from src.agents.nodes.ticket_creator import ticket_creator_node
+from src.agents.state import TriageState
+
+
+def route_after_dedup_and_flaky(state: TriageState) -> str:
+    """Route based on duplicate and flakiness detection results.
+
+    Priority order:
+      1. Duplicate — always skip ticket creation, notify only.
+      2. Flaky (not duplicate) — skip ticket creation, notify as flaky.
+      3. Neither — create ticket then notify.
+    """
+    if state.get("is_duplicate", False):
+        return "notifier"
+    if state.get("is_flaky", False):
+        return "notifier"
+    return "ticket_creator"
+
+
+def build_triage_graph() -> StateGraph:
+    """Construct and compile the Phase 2 LangGraph triage pipeline.
+
+    Graph topology (Phase 2):
+
+        pipeline_monitor → failure_classifier → log_analyzer → duplicate_detector
+                                                                     ↓
+                                                             flaky_detector
+                                                                     ↓
+                                                     route_after_dedup_and_flaky()
+                                                     /          |           \\
+                                               notifier     notifier    ticket_creator
+                                           (is_duplicate) (is_flaky)   (neither)
+                                                     \\          |          /
+                                                      notifier ← ← ← ← ←
+                                                           ↓
+                                                          END
+    """
+    graph: StateGraph = StateGraph(TriageState)
+
+    graph.add_node("pipeline_monitor", pipeline_monitor_node)
+    graph.add_node("failure_classifier", failure_classifier_node)
+    graph.add_node("log_analyzer", log_analyzer_node)
+    graph.add_node("duplicate_detector", duplicate_detector_node)
+    graph.add_node("flaky_detector", flaky_detector_node)
+    graph.add_node("ticket_creator", ticket_creator_node)
+    graph.add_node("notifier", notifier_node)
+
+    graph.set_entry_point("pipeline_monitor")
+    graph.add_edge("pipeline_monitor", "failure_classifier")
+    graph.add_edge("failure_classifier", "log_analyzer")
+    graph.add_edge("log_analyzer", "duplicate_detector")
+    graph.add_edge("duplicate_detector", "flaky_detector")
+    graph.add_conditional_edges(
+        "flaky_detector",
+        route_after_dedup_and_flaky,
+        {"ticket_creator": "ticket_creator", "notifier": "notifier"},
+    )
+    graph.add_edge("ticket_creator", "notifier")
+    graph.add_edge("notifier", END)
+
+    return graph.compile()
+
+
+# Module-level singleton — compiled once at import time and reused for every
+# triage invocation.  Each run supplies its own initial TriageState dict so
+# there is no shared mutable state between concurrent executions.
+triage_graph = build_triage_graph()

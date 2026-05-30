@@ -1,0 +1,134 @@
+# Production overlay — use with:
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up
+#
+# Adds api and celery_worker services; hardens all infrastructure services
+# with resource limits, restart policies, log rotation, and security options.
+
+services:
+  api:
+    build: .
+    restart: always
+    ports:
+      - "8000:8000"
+    deploy:
+      replicas: 2
+      resources:
+        limits:
+          memory: 512m
+          cpus: "0.50"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    env_file:
+      - .env
+    volumes: []  # No source-code bind mounts in prod — code is baked into image
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    security_opt:
+      - no-new-privileges:true
+
+  celery_worker:
+    build: .
+    restart: always
+    command: celery -A src.workers.celery_app worker --loglevel=info --concurrency=4
+    deploy:
+      replicas: 2
+      resources:
+        limits:
+          memory: 512m
+          cpus: "0.50"
+    env_file:
+      - .env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    security_opt:
+      - no-new-privileges:true
+
+  postgres:
+    restart: always
+    environment:
+      POSTGRES_INITDB_ARGS: "--data-checksums"
+    ports: []  # Not exposed to host in prod
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    security_opt:
+      - no-new-privileges:true
+
+  redis:
+    restart: always
+    ports: []  # Not exposed to host in prod
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    security_opt:
+      - no-new-privileges:true
+
+  qdrant:
+    restart: always
+    ports: []  # Not exposed to host in prod
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    security_opt:
+      - no-new-privileges:true
+
+  prometheus:
+    restart: always
+    # Port 9090 is blocked by Windows Hyper-V port exclusions — keep 9700 mapping
+    ports:
+      - "9700:9090"
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    security_opt:
+      - no-new-privileges:true
+
+  grafana:
+    restart: always
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    security_opt:
+      - no-new-privileges:true
+
+  jaeger:
+    restart: always
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    security_opt:
+      - no-new-privileges:true

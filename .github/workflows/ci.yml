@@ -1,0 +1,113 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: uv sync --all-extras
+
+      - name: Run ruff
+        run: uv run ruff check src/ tests/
+
+      - name: Run mypy
+        run: uv run mypy src/ --ignore-missing-imports
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: qa_triage_test
+          POSTGRES_USER: qa_user
+          POSTGRES_PASSWORD: qa_password
+        ports:
+          - "5432:5432"
+        options: >-
+          --health-cmd "pg_isready -U qa_user -d qa_triage_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - "6379:6379"
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          python-version: "3.12"
+
+      - name: Restore .venv cache
+        uses: actions/cache@v4
+        with:
+          path: .venv
+          key: venv-${{ runner.os }}-${{ hashFiles('pyproject.toml') }}
+          restore-keys: |
+            venv-${{ runner.os }}-
+
+      - name: Install dependencies
+        run: uv sync --all-extras
+
+      - name: Run Alembic migrations
+        run: uv run alembic upgrade head
+        env:
+          DATABASE_URL: postgresql+asyncpg://qa_user:qa_password@localhost:5432/qa_triage_test
+          REDIS_URL: redis://localhost:6379/0
+          ANTHROPIC_API_KEY: test-key
+          SECRET_KEY: test-secret
+          JENKINS_WEBHOOK_SECRET: test-secret
+          GITHUB_WEBHOOK_SECRET: test-secret
+
+      - name: Run pytest
+        run: uv run pytest tests/ --cov=src --cov-report=xml --cov-report=term -x
+        env:
+          DATABASE_URL: postgresql+asyncpg://qa_user:qa_password@localhost:5432/qa_triage_test
+          REDIS_URL: redis://localhost:6379/0
+          ANTHROPIC_API_KEY: test-key
+          SECRET_KEY: test-secret
+          JENKINS_WEBHOOK_SECRET: test-secret
+          GITHUB_WEBHOOK_SECRET: test-secret
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage.xml
+
+  docker-build:
+    name: Docker Build
+    runs-on: ubuntu-latest
+    needs:
+      - lint
+      - test
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build Docker image
+        run: docker build --no-cache -t autonomous-qa:ci .

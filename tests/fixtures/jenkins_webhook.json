@@ -1,0 +1,1 @@
+{"name": "my-pipeline", "url": "job/my-pipeline/", "build": {"full_url": "http://jenkins:8080/job/my-pipeline/42/", "number": 42, "status": "FAILURE", "url": "job/my-pipeline/42/", "scm": {"url": "https://github.com/org/my-service", "branch": "main", "commit": "abc123def456"}, "artifacts": {}}}

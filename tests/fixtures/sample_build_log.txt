@@ -1,0 +1,38 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.0, pytest-8.3.0, pluggy-1.5.0
+rootdir: /app
+collected 5 items
+
+tests/auth/test_login.py::TestLogin::test_user_login FAILED             [ 20%]
+tests/checkout/test_cart.py::TestCart::test_add_to_cart FAILED          [ 40%]
+tests/payments/test_processor.py::TestProcessor::test_charge_card FAILED [ 60%]
+tests/api/test_health.py::test_health_check PASSED                       [ 80%]
+tests/api/test_ready.py::test_readiness_probe PASSED                     [100%]
+
+=================================== FAILURES ===================================
+FAILED tests/auth/test_login.py::TestLogin::test_user_login - AssertionError: Expected 200, got 500
+  File "tests/auth/test_login.py", line 42, in test_user_login
+    assert response.status_code == 200
+  File "src/auth/views.py", line 18, in login
+    return authenticate(username, password)
+E  AssertionError: Expected 200, got 500
+
+FAILED tests/checkout/test_cart.py::TestCart::test_add_to_cart - ValueError: item price cannot be negative
+  File "tests/checkout/test_cart.py", line 77, in test_add_to_cart
+    cart.add_item(product, quantity=1)
+  File "src/checkout/cart.py", line 55, in add_item
+    raise ValueError(f"item price cannot be negative: {product.price}")
+E  ValueError: item price cannot be negative
+
+FAILED tests/payments/test_processor.py::TestProcessor::test_charge_card - AssertionError: Expected transaction_id in response
+  File "tests/payments/test_processor.py", line 31, in test_charge_card
+    assert "transaction_id" in result
+  File "src/payments/processor.py", line 92, in charge
+    return self._gateway.process(amount, token)
+E  AssertionError: Expected transaction_id in response
+
+============================= short test summary info ==============================
+FAILED tests/auth/test_login.py::TestLogin::test_user_login - AssertionError: Expected 200, got 500
+FAILED tests/checkout/test_cart.py::TestCart::test_add_to_cart - ValueError: item price cannot be negative
+FAILED tests/payments/test_processor.py::TestProcessor::test_charge_card - AssertionError: Expected transaction_id in response
+===== 3 failed, 2 passed in 1.23s =====
