@@ -5,6 +5,7 @@ import uuid
 from contextlib import asynccontextmanager
 from unittest.mock import AsyncMock, MagicMock, patch
 
+from langchain_core.messages import HumanMessage
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.agents.nodes.failure_classifier import ClassificationResult, failure_classifier_node
@@ -210,3 +211,85 @@ async def test_classifier_result_in_state(db_session: AsyncSession):
     assert classification["category"] == "product_bug"
     assert classification["confidence"] == 0.85
     assert "reasoning" in classification
+
+
+async def test_classifier_injects_few_shot_when_similar_outcomes_exist(
+    db_session: AsyncSession,
+):
+    """When find_similar_outcomes returns results, the human message passed to
+    the LLM contains the 'Past Example 1' header and the outcome category."""
+    failure = await _make_failure(db_session)
+    state = {**initial_state("some-event-id"), "failure_ids": [str(failure.id)]}
+
+    similar_outcomes = [
+        {
+            "id": "abc",
+            "score": 0.92,
+            "payload": {
+                "test_name": "tests/auth/test_login.py::test_token",
+                "category": "product_bug",
+                "confidence": 0.88,
+                "reasoning": "Token endpoint returned 500.",
+            },
+        }
+    ]
+
+    mock_llm_cls = _make_mock_llm(category="product_bug", confidence=0.85)
+    session_factory = _make_session_factory(db_session)
+
+    with (
+        patch("src.agents.nodes.failure_classifier.ChatAnthropic", mock_llm_cls),
+        patch(
+            "src.agents.nodes.failure_classifier.get_session_factory",
+            return_value=session_factory,
+        ),
+        patch(
+            "src.agents.nodes.failure_classifier.find_similar_outcomes",
+            new_callable=AsyncMock,
+            return_value=similar_outcomes,
+        ),
+    ):
+        await failure_classifier_node(state)
+
+    # Retrieve the messages list passed to ainvoke.
+    chain_mock = mock_llm_cls.return_value.with_structured_output.return_value
+    messages_passed = chain_mock.ainvoke.call_args.args[0]
+
+    # The second message (index 1) is the HumanMessage containing the dynamic few-shot.
+    human_msg = messages_passed[1]
+    assert isinstance(human_msg, HumanMessage)
+    assert "Past Example 1" in human_msg.content
+    assert "product_bug" in human_msg.content
+
+
+async def test_classifier_proceeds_without_few_shot_when_qdrant_unavailable(
+    db_session: AsyncSession,
+):
+    """When find_similar_outcomes raises, the exception is suppressed, the
+    classifier still invokes Claude, and no few_shot-related error is appended."""
+    failure = await _make_failure(db_session)
+    state = {**initial_state("some-event-id"), "failure_ids": [str(failure.id)]}
+
+    mock_llm_cls = _make_mock_llm(category="product_bug", confidence=0.85)
+    session_factory = _make_session_factory(db_session)
+
+    with (
+        patch("src.agents.nodes.failure_classifier.ChatAnthropic", mock_llm_cls),
+        patch(
+            "src.agents.nodes.failure_classifier.get_session_factory",
+            return_value=session_factory,
+        ),
+        patch(
+            "src.agents.nodes.failure_classifier.find_similar_outcomes",
+            new_callable=AsyncMock,
+            side_effect=Exception("Qdrant down"),
+        ),
+    ):
+        result = await failure_classifier_node(state)
+
+    # Classification must still succeed.
+    assert result.get("classification") is not None
+
+    # The Qdrant exception is non-fatal — no few_shot error in the errors list.
+    errors = result.get("errors", [])
+    assert not any("few_shot" in err for err in errors)

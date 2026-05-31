@@ -25,6 +25,7 @@ class TriageState(TypedDict):
 
     # Set by log_analyzer node (Sprint 2)
     error_signature: str | None     # SHA-256 hash
+    normalized_error_text: str | None  # normalized text used to compute the hash
 
     # Set by duplicate_detector node (Sprint 2)
     is_duplicate: bool
@@ -71,6 +72,7 @@ def initial_state(pipeline_event_id: str) -> TriageState:
         classification=None,
         # log_analyzer outputs (Sprint 2)
         error_signature=None,
+        normalized_error_text=None,
         # duplicate_detector outputs (Sprint 2)
         is_duplicate=False,
         duplicate_of_id=None,

@@ -85,6 +85,7 @@ async def log_analyzer_node(state: TriageState) -> dict:
 
     session_factory = get_session_factory()
     last_hash: str | None = None
+    last_normalized: str | None = None
     errors: list[str] = list(state["errors"])
 
     for failure_id in state["failure_ids"]:
@@ -100,8 +101,10 @@ async def log_analyzer_node(state: TriageState) -> dict:
                     continue
 
                 error_text = (failure.error_message or "") + "\n" + (failure.stack_trace or "")
-                sig_hash = compute_signature(error_text)
+                normalized = normalize_error(error_text)
+                sig_hash = hashlib.sha256(normalized.encode()).hexdigest()
                 last_hash = sig_hash
+                last_normalized = normalized
 
                 log.info(
                     "log_analyzer.signature_computed",
@@ -122,5 +125,6 @@ async def log_analyzer_node(state: TriageState) -> dict:
 
     return {
         "error_signature": last_hash,
+        "normalized_error_text": last_normalized,
         "errors": errors,
     }

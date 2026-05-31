@@ -6,6 +6,7 @@ from langgraph.graph.state import CompiledStateGraph
 from src.agents.nodes.duplicate_detector import duplicate_detector_node
 from src.agents.nodes.failure_classifier import failure_classifier_node
 from src.agents.nodes.flaky_detector import flaky_detector_node
+from src.agents.nodes.learner import learner_node
 from src.agents.nodes.log_analyzer import log_analyzer_node
 from src.agents.nodes.notifier import notifier_node
 from src.agents.nodes.pipeline_monitor import pipeline_monitor_node
@@ -44,6 +45,8 @@ def build_triage_graph() -> CompiledStateGraph:
                                                      \\          |          /
                                                       notifier ← ← ← ← ←
                                                            ↓
+                                                        learner
+                                                           ↓
                                                           END
     """
     graph: StateGraph = StateGraph(TriageState)
@@ -55,6 +58,7 @@ def build_triage_graph() -> CompiledStateGraph:
     graph.add_node("flaky_detector", flaky_detector_node)
     graph.add_node("ticket_creator", ticket_creator_node)
     graph.add_node("notifier", notifier_node)
+    graph.add_node("learner", learner_node)
 
     graph.set_entry_point("pipeline_monitor")
     graph.add_edge("pipeline_monitor", "failure_classifier")
@@ -67,7 +71,8 @@ def build_triage_graph() -> CompiledStateGraph:
         {"ticket_creator": "ticket_creator", "notifier": "notifier"},
     )
     graph.add_edge("ticket_creator", "notifier")
-    graph.add_edge("notifier", END)
+    graph.add_edge("notifier", "learner")
+    graph.add_edge("learner", END)
 
     return graph.compile()
 

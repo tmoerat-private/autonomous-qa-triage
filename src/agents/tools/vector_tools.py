@@ -13,7 +13,8 @@ from typing import Any
 import structlog
 from sentence_transformers import SentenceTransformer
 
-from src.db.qdrant_client import get_qdrant_manager
+from src.config.settings import get_settings
+from src.db.qdrant_client import QdrantManager, get_qdrant_manager
 
 logger = structlog.get_logger(__name__)
 
@@ -97,6 +98,63 @@ async def find_similar_errors(
     )
     logger.info(
         "vector_tools.similarity_search_complete",
+        matches=len(results),
+        threshold=score_threshold,
+    )
+    return results
+
+
+def _get_outcomes_manager() -> QdrantManager:
+    """Return a QdrantManager pointed at the triage_outcomes collection."""
+    settings = get_settings()
+    return QdrantManager(
+        url=settings.qdrant_url,
+        collection_name=settings.qdrant_outcomes_collection,
+    )
+
+
+async def store_outcome_embedding(
+    point_id: str,
+    error_text: str,
+    payload: dict[str, Any],
+) -> None:
+    """Store a triage outcome embedding in the triage_outcomes Qdrant collection.
+
+    Args:
+        point_id: UUID string for the TestFailure record.
+        error_text: Normalized error text to embed and store.
+        payload: Metadata (test_name, category, confidence, reasoning, ticket_url, …).
+    """
+    vector = await generate_embedding(error_text)
+    manager = _get_outcomes_manager()
+    await manager.ensure_collection(vector_size=len(vector))
+    await manager.store_embedding(point_id=point_id, vector=vector, payload=payload)
+    logger.info("vector_tools.outcome_stored", point_id=point_id)
+
+
+async def find_similar_outcomes(
+    error_text: str,
+    limit: int = 3,
+    score_threshold: float = 0.80,
+) -> list[dict]:
+    """Search the triage_outcomes collection for similar past failure outcomes.
+
+    Uses a slightly lower threshold than dedup (0.80 vs 0.85) to cast a wider
+    net when retrieving few-shot examples.
+
+    Returns:
+        List of dicts: [{"id": str, "score": float, "payload": dict}, ...]
+    """
+    vector = await generate_embedding(error_text)
+    manager = _get_outcomes_manager()
+    await manager.ensure_collection(vector_size=len(vector))
+    results = await manager.find_similar(
+        query_vector=vector,
+        limit=limit,
+        score_threshold=score_threshold,
+    )
+    logger.info(
+        "vector_tools.outcomes_search_complete",
         matches=len(results),
         threshold=score_threshold,
     )

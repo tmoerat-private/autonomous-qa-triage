@@ -1,9 +1,16 @@
-"""Tests for normalize_error() and compute_signature() — pure functions, no DB, no async."""
+"""Tests for normalize_error(), compute_signature(), and log_analyzer_node()."""
 from __future__ import annotations
 
-import pytest
+from contextlib import asynccontextmanager
+from unittest.mock import patch
 
-from src.agents.nodes.log_analyzer import compute_signature, normalize_error
+import pytest
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from src.agents.nodes.log_analyzer import compute_signature, log_analyzer_node, normalize_error
+from src.agents.state import initial_state
+from src.models.pipeline_event import PipelineEvent
+from src.models.test_failure import TestFailure
 
 # ---------------------------------------------------------------------------
 # normalize_error — individual normalization steps
@@ -98,3 +105,96 @@ def test_compute_signature_different_inputs():
 def test_signature_length_always_64(raw: str):
     result = compute_signature(raw)
     assert len(result) == 64
+
+
+# ---------------------------------------------------------------------------
+# log_analyzer_node — async node tests using real test DB
+# ---------------------------------------------------------------------------
+
+
+async def _make_failure(db_session: AsyncSession) -> TestFailure:
+    """Insert a PipelineEvent + TestFailure and return the TestFailure."""
+    event = PipelineEvent(
+        provider="github_actions",
+        provider_build_id="run-1",
+        repository="org/repo",
+        branch="main",
+        commit_sha="abc123",
+        pipeline_name="CI",
+        status="failure",
+        raw_payload={},
+    )
+    db_session.add(event)
+    await db_session.flush()
+
+    failure = TestFailure(
+        pipeline_event_id=event.id,
+        test_name="test_example",
+        error_message="AssertionError: expected True, got False",
+        stack_trace="File test.py, line 42\nAssertionError",
+        status="new",
+    )
+    db_session.add(failure)
+    await db_session.flush()
+    return failure
+
+
+def _make_session_factory(test_session: AsyncSession):
+    """Return a callable that produces an async context manager yielding test_session."""
+
+    @asynccontextmanager
+    async def _ctx():
+        yield test_session
+
+    def _factory():
+        return _ctx()
+
+    return _factory
+
+
+async def test_log_analyzer_sets_normalized_error_text_in_state(
+    db_session: AsyncSession,
+):
+    """log_analyzer_node returns a dict with 'normalized_error_text' as a non-empty string."""
+    failure = await _make_failure(db_session)
+    state = {**initial_state("some-event-id"), "failure_ids": [str(failure.id)]}
+
+    session_factory = _make_session_factory(db_session)
+
+    with patch(
+        "src.agents.nodes.log_analyzer.get_session_factory",
+        return_value=session_factory,
+    ):
+        result = await log_analyzer_node(state)
+
+    assert "normalized_error_text" in result
+    assert isinstance(result["normalized_error_text"], str)
+    assert len(result["normalized_error_text"]) > 0
+
+
+async def test_log_analyzer_normalized_error_text_differs_from_hash(
+    db_session: AsyncSession,
+):
+    """normalized_error_text is the human-readable normalized string, not the hex digest.
+
+    The hash is always a 64-character hex string; the normalized text will
+    contain words and spaces from the original error message.
+    """
+    failure = await _make_failure(db_session)
+    state = {**initial_state("some-event-id"), "failure_ids": [str(failure.id)]}
+
+    session_factory = _make_session_factory(db_session)
+
+    with patch(
+        "src.agents.nodes.log_analyzer.get_session_factory",
+        return_value=session_factory,
+    ):
+        result = await log_analyzer_node(state)
+
+    normalized_text = result["normalized_error_text"]
+    error_signature = result["error_signature"]
+
+    # The hash is a 64-char lowercase hex string; the normalized text is not.
+    assert normalized_text != error_signature
+    assert len(error_signature) == 64
+    assert " " in normalized_text or len(normalized_text) != 64

@@ -19,6 +19,7 @@ class Settings(BaseSettings):
     # Vector DB
     qdrant_url: str = "http://localhost:6333"
     qdrant_collection: str = "error_signatures"
+    qdrant_outcomes_collection: str = "triage_outcomes"
 
     # Phase 2 — vector similarity
     qdrant_vector_size: int = 384           # matches all-MiniLM-L6-v2 output dims

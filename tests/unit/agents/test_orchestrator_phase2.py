@@ -98,6 +98,7 @@ EXPECTED_NODES = {
     "flaky_detector",
     "ticket_creator",
     "notifier",
+    "learner",
 }
 
 
@@ -178,14 +179,26 @@ def test_flaky_detector_has_no_unconditional_outgoing_edge():
     )
 
 
-def test_notifier_is_terminal_node():
-    """notifier has no outgoing plain edges (it is the last node before END)."""
+def test_notifier_leads_to_learner():
+    """notifier must have a direct edge to learner (not straight to END)."""
     graph = build_triage_graph()
-    outgoing = {end for start, end in graph.builder.edges if start == "notifier"}
-    # The only thing notifier connects to is END, which is not in builder.edges as a
-    # named node — it is stored as the LangGraph END sentinel.  Either way, no
-    # user-defined node should appear as a destination from notifier.
+    assert ("notifier", "learner") in graph.builder.edges, (
+        f"Expected (notifier, learner) edge. Edges from notifier: "
+        f"{[e for e in graph.builder.edges if e[0] == 'notifier']}"
+    )
+
+
+def test_learner_is_terminal_node():
+    """learner is the last user-defined node; it has no plain edges to other user nodes."""
+    graph = build_triage_graph()
+    outgoing = {end for start, end in graph.builder.edges if start == "learner"}
     for dest in outgoing:
         assert dest not in EXPECTED_NODES, (
-            f"notifier unexpectedly routes to user node '{dest}'"
+            f"learner unexpectedly routes to user node '{dest}'"
         )
+
+
+def test_learner_node_is_present():
+    """Explicit check: learner is in the compiled graph."""
+    graph = build_triage_graph()
+    assert "learner" in graph.nodes

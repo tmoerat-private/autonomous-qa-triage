@@ -7,8 +7,10 @@ from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import HumanMessage, SystemMessage
 from pydantic import BaseModel, Field
 
+from src.agents.nodes.log_analyzer import normalize_error
 from src.agents.prompts.classifier_prompt import CLASSIFIER_SYSTEM_PROMPT
 from src.agents.state import TriageState
+from src.agents.tools.vector_tools import find_similar_outcomes
 from src.config.settings import get_settings
 from src.db.repositories.classification_repo import ClassificationRepository
 from src.db.repositories.failure_repo import FailureRepository
@@ -78,10 +80,46 @@ async def failure_classifier_node(state: TriageState) -> dict:
                     errors.append(msg)
                     continue
 
+                # --- Dynamic few-shot from Learning & Memory Agent ---
+                dynamic_few_shot = ""
+                try:
+                    raw_error = (failure.error_message or "") + "\n" + (failure.stack_trace or "")
+                    normalized = normalize_error(raw_error)
+                    similar_outcomes = await find_similar_outcomes(normalized)
+                    if similar_outcomes:
+                        examples = []
+                        for i, outcome in enumerate(similar_outcomes, 1):
+                            p = outcome["payload"]
+                            examples.append(
+                                f"### Past Example {i} (similarity: {outcome['score']:.2f})\n"
+                                f"Test: {p.get('test_name', 'unknown')}\n"
+                                f"Classification: {p.get('category')} "
+                                f"(confidence {p.get('confidence', 0):.2f})\n"
+                                f"Reasoning: {p.get('reasoning', '')}"
+                            )
+                        dynamic_few_shot = (
+                            "\n\n## Retrieved Similar Cases\n"
+                            + "\n\n".join(examples)
+                            + "\n"
+                        )
+                        log.info(
+                            "failure_classifier.few_shot_retrieved",
+                            failure_id=failure_id,
+                            count=len(similar_outcomes),
+                        )
+                except Exception as exc:
+                    # Non-fatal: proceed with the static prompt if Qdrant is unavailable.
+                    log.warning(
+                        "failure_classifier.few_shot_error",
+                        failure_id=failure_id,
+                        error=str(exc),
+                    )
+
                 user_message = (
                     f"Test: {failure.test_name}\n"
                     f"Error: {failure.error_message or 'N/A'}\n"
                     f"Stack trace:\n{(failure.stack_trace or '')[:2000]}"
+                    f"{dynamic_few_shot}"
                 )
 
                 result: ClassificationResult = await structured_llm.ainvoke(  # type: ignore[assignment]
