@@ -92,7 +92,8 @@ def _make_session_factory(test_session: AsyncSession):
 async def test_root_cause_success(db_session: AsyncSession):
     """Node analyzes a failure and returns root_cause dict with expected values."""
     failure = await _make_failure(db_session)
-    state = {**initial_state(_TEST_PIPELINE_EVENT_ID), "failure_ids": [str(failure.id)]}
+    # Use the real PipelineEvent id so the FK constraint on root_cause_analyses is satisfied
+    state = {**initial_state(str(failure.pipeline_event_id)), "failure_ids": [str(failure.id)]}
 
     mock_llm_cls = _make_mock_llm(
         root_cause_summary="DB pool exhausted",
@@ -159,7 +160,8 @@ async def test_root_cause_failure_not_found(db_session: AsyncSession):
 async def test_root_cause_llm_exception(db_session: AsyncSession):
     """Node captures LLM timeout into errors without raising; root_cause is None."""
     failure = await _make_failure(db_session)
-    state = {**initial_state(_TEST_PIPELINE_EVENT_ID), "failure_ids": [str(failure.id)]}
+    # Use the real PipelineEvent id so the FK constraint on root_cause_analyses is satisfied
+    state = {**initial_state(str(failure.pipeline_event_id)), "failure_ids": [str(failure.id)]}
 
     mock_chain = MagicMock()
     mock_chain.ainvoke = AsyncMock(side_effect=Exception("timeout"))
@@ -183,8 +185,9 @@ async def test_root_cause_llm_exception(db_session: AsyncSession):
 async def test_root_cause_includes_classification_context(db_session: AsyncSession):
     """HumanMessage passed to LLM contains classification category when present in state."""
     failure = await _make_failure(db_session)
+    # Use the real PipelineEvent id so the FK constraint on root_cause_analyses is satisfied
     state = {
-        **initial_state(_TEST_PIPELINE_EVENT_ID),
+        **initial_state(str(failure.pipeline_event_id)),
         "failure_ids": [str(failure.id)],
         "classification": {
             "category": "product_bug",
@@ -217,7 +220,8 @@ async def test_root_cause_includes_classification_context(db_session: AsyncSessi
 async def test_root_cause_result_structure(db_session: AsyncSession):
     """Returned root_cause dict has all four expected keys."""
     failure = await _make_failure(db_session)
-    state = {**initial_state(_TEST_PIPELINE_EVENT_ID), "failure_ids": [str(failure.id)]}
+    # Use the real PipelineEvent id so the FK constraint on root_cause_analyses is satisfied
+    state = {**initial_state(str(failure.pipeline_event_id)), "failure_ids": [str(failure.id)]}
 
     mock_llm_cls = _make_mock_llm(
         root_cause_summary="Race condition in auth middleware",
