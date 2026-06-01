@@ -31,6 +31,9 @@ class Settings(BaseSettings):
     flaky_min_failure_rate: float = 0.05  # below this = probably a real new failure
     flaky_max_failure_rate: float = 0.75  # above this = probably a persistent bug
 
+    # Phase 3 — autonomous reruns
+    enable_auto_rerun: bool = False
+
     # AI
     anthropic_api_key: str = ""
     default_model: str = "claude-sonnet-4-20250514"

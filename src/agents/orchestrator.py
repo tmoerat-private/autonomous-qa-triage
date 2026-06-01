@@ -6,10 +6,13 @@ from langgraph.graph.state import CompiledStateGraph
 from src.agents.nodes.duplicate_detector import duplicate_detector_node
 from src.agents.nodes.failure_classifier import failure_classifier_node
 from src.agents.nodes.flaky_detector import flaky_detector_node
+from src.agents.nodes.heal_suggester import heal_suggester_node
 from src.agents.nodes.learner import learner_node
 from src.agents.nodes.log_analyzer import log_analyzer_node
 from src.agents.nodes.notifier import notifier_node
 from src.agents.nodes.pipeline_monitor import pipeline_monitor_node
+from src.agents.nodes.rerun_trigger import rerun_trigger_node
+from src.agents.nodes.root_cause import root_cause_node
 from src.agents.nodes.ticket_creator import ticket_creator_node
 from src.agents.state import TriageState
 
@@ -30,13 +33,19 @@ def route_after_dedup_and_flaky(state: TriageState) -> str:
 
 
 def build_triage_graph() -> CompiledStateGraph:
-    """Construct and compile the Phase 2 LangGraph triage pipeline.
+    """Construct and compile the Phase 3 LangGraph triage pipeline.
 
-    Graph topology (Phase 2):
+    Graph topology (Phase 3):
 
-        pipeline_monitor → failure_classifier → log_analyzer → duplicate_detector
+        pipeline_monitor → failure_classifier → log_analyzer → root_cause
+                                                                     ↓
+                                                            heal_suggester
+                                                                     ↓
+                                                          duplicate_detector
                                                                      ↓
                                                              flaky_detector
+                                                                     ↓
+                                                            rerun_trigger
                                                                      ↓
                                                      route_after_dedup_and_flaky()
                                                      /          |           \\
@@ -54,8 +63,11 @@ def build_triage_graph() -> CompiledStateGraph:
     graph.add_node("pipeline_monitor", pipeline_monitor_node)
     graph.add_node("failure_classifier", failure_classifier_node)
     graph.add_node("log_analyzer", log_analyzer_node)
+    graph.add_node("root_cause", root_cause_node)
+    graph.add_node("heal_suggester", heal_suggester_node)
     graph.add_node("duplicate_detector", duplicate_detector_node)
     graph.add_node("flaky_detector", flaky_detector_node)
+    graph.add_node("rerun_trigger", rerun_trigger_node)
     graph.add_node("ticket_creator", ticket_creator_node)
     graph.add_node("notifier", notifier_node)
     graph.add_node("learner", learner_node)
@@ -63,10 +75,13 @@ def build_triage_graph() -> CompiledStateGraph:
     graph.set_entry_point("pipeline_monitor")
     graph.add_edge("pipeline_monitor", "failure_classifier")
     graph.add_edge("failure_classifier", "log_analyzer")
-    graph.add_edge("log_analyzer", "duplicate_detector")
+    graph.add_edge("log_analyzer", "root_cause")
+    graph.add_edge("root_cause", "heal_suggester")
+    graph.add_edge("heal_suggester", "duplicate_detector")
     graph.add_edge("duplicate_detector", "flaky_detector")
+    graph.add_edge("flaky_detector", "rerun_trigger")
     graph.add_conditional_edges(
-        "flaky_detector",
+        "rerun_trigger",
         route_after_dedup_and_flaky,
         {"ticket_creator": "ticket_creator", "notifier": "notifier"},
     )

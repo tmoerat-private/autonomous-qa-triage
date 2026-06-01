@@ -43,6 +43,16 @@ class TriageState(TypedDict):
     # Set by notifier node (Sprint 3)
     notification_sent: bool
 
+    # Set by root_cause node (Phase 3)
+    root_cause: dict | None
+
+    # Set by heal_suggester node (Phase 3)
+    heal_suggestion: dict | None
+
+    # Set by rerun_trigger node (Phase 3)
+    rerun_triggered: bool
+    rerun_job_id: str | None
+
     # Observability
     agent_run_id: str | None
     errors: list[str]               # non-fatal errors accumulated during triage
@@ -85,6 +95,13 @@ def initial_state(pipeline_event_id: str) -> TriageState:
         ticket_url=None,
         # notifier outputs (Sprint 3)
         notification_sent=False,
+        # root_cause outputs (Phase 3)
+        root_cause=None,
+        # heal_suggester outputs (Phase 3)
+        heal_suggestion=None,
+        # rerun_trigger outputs (Phase 3)
+        rerun_triggered=False,
+        rerun_job_id=None,
         # observability
         agent_run_id=None,
         errors=[],

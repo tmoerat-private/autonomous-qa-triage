@@ -165,3 +165,59 @@ class JenkinsClient(BaseCIClient):
             text = text[:MAX_LOG_LENGTH]
 
         return text
+
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=1, max=10),
+        retry=retry_if_exception_type(_RETRY_EXCEPTIONS),
+    )
+    async def trigger_rerun(self, job_name: str, build_number: int) -> dict:
+        """Trigger a new build of the same Jenkins job via the Remote Build API.
+
+        Attempts to fetch a CSRF crumb first (POST /crumbIssuer/api/json).
+        If the crumb endpoint returns 404/403, proceeds without it (some Jenkins
+        instances have CSRF protection disabled).
+
+        Args:
+            job_name: The Jenkins job name (may include folder paths).
+            build_number: The original failing build number (used only for logging).
+
+        Returns:
+            {"triggered": True, "job_name": job_name, "build_number": build_number}
+
+        Raises:
+            httpx.HTTPStatusError: If the build trigger POST returns a non-2xx
+                status after retries.
+        """
+        auth = httpx.BasicAuth(self.settings.jenkins_user, self.settings.jenkins_token)
+
+        # Attempt to fetch a CSRF crumb; skip gracefully if CSRF is disabled.
+        crumb_headers: dict[str, str] = {}
+        crumb_url = f"{self.settings.jenkins_url}/crumbIssuer/api/json"
+        crumb_response = await self.client.get(crumb_url, auth=auth)
+        if crumb_response.status_code == 200:
+            crumb_data = crumb_response.json()
+            crumb_headers[crumb_data["crumbRequestField"]] = crumb_data["crumb"]
+        # 404 or 403 means CSRF is disabled — proceed without crumb headers.
+
+        build_url = f"{self.settings.jenkins_url}/job/{job_name}/build"
+
+        logger.debug(
+            "jenkins.trigger_rerun.request",
+            job_name=job_name,
+            build_number=build_number,
+            url=build_url,
+            has_crumb=bool(crumb_headers),
+        )
+
+        response = await self.client.post(build_url, auth=auth, headers=crumb_headers)
+        response.raise_for_status()
+
+        logger.info(
+            "jenkins.trigger_rerun.triggered",
+            job_name=job_name,
+            build_number=build_number,
+            status_code=response.status_code,
+        )
+
+        return {"triggered": True, "job_name": job_name, "build_number": build_number}

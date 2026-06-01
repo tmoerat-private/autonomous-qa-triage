@@ -252,3 +252,48 @@ class GitHubActionsClient(BaseCIClient):
             raise
 
         return response.json().get("jobs", [])
+
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=1, max=10),
+        retry=retry_if_exception_type(_RETRY_EXCEPTIONS),
+    )
+    async def trigger_rerun(self, repo_full_name: str, run_id: int) -> dict:
+        """Re-run all failed jobs in an existing GitHub Actions workflow run.
+
+        Uses the POST /repos/{owner}/{repo}/actions/runs/{run_id}/rerun-failed-jobs
+        endpoint (GitHub returns 201 Created on success).
+
+        Args:
+            repo_full_name: Repository in "org/repo" format.
+            run_id: The numeric workflow-run ID to re-run.
+
+        Returns:
+            {"triggered": True, "repo": repo_full_name, "run_id": run_id}
+
+        Raises:
+            httpx.HTTPStatusError: On non-2xx responses after retries.
+        """
+        url = (
+            f"https://api.github.com/repos/{repo_full_name}/actions/runs/{run_id}"
+            "/rerun-failed-jobs"
+        )
+
+        logger.debug(
+            "github_actions.trigger_rerun.request",
+            repo=repo_full_name,
+            run_id=run_id,
+        )
+
+        response = await self.client.post(url)
+        if response.status_code not in {200, 201}:
+            response.raise_for_status()
+
+        logger.info(
+            "github_actions.trigger_rerun.triggered",
+            repo=repo_full_name,
+            run_id=run_id,
+            status_code=response.status_code,
+        )
+
+        return {"triggered": True, "repo": repo_full_name, "run_id": run_id}
