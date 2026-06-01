@@ -91,7 +91,7 @@ async def visual_analyzer_node(state: TriageState) -> dict:
 
     # --- Phase 3: Call Claude with structured output ---
     try:
-        content_blocks: list[dict] = []
+        content_blocks: list[str | dict] = []
         for screenshot, img_bytes in zip(valid_screenshots, valid_bytes, strict=True):
             b64 = base64.standard_b64encode(img_bytes).decode("utf-8")
             content_blocks.append(
