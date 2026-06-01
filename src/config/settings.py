@@ -43,7 +43,7 @@ class Settings(BaseSettings):
 
     # AI
     anthropic_api_key: str = ""
-    default_model: str = "claude-sonnet-4-20250514"
+    default_model: str = "claude-sonnet-4-6"
     fallback_model: str = "gpt-4o"
 
     # Jenkins (optional)
