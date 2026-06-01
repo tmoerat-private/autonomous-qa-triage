@@ -34,3 +34,9 @@ uv.lock
 
 # Model cache (sentence-transformers downloads)
 .cache/
+
+# Node
+node_modules/
+
+# Claude Code local settings (contains machine-specific paths)
+.claude/settings.local.json
