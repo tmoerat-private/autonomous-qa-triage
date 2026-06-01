@@ -15,6 +15,7 @@ from src.config.settings import get_settings
 from src.db.repositories.heal_suggestion_repo import HealSuggestionRepository
 from src.db.repositories.pipeline_repo import PipelineEventRepository
 from src.db.repositories.rerun_repo import RerunRepository
+from src.db.repositories.root_cause_repo import RootCauseRepository
 from src.db.repositories.screenshot_repo import ScreenshotRepository
 from src.schemas.failure_schemas import (
     ClassificationDetail,
@@ -24,6 +25,7 @@ from src.schemas.failure_schemas import (
     PaginatedFailuresResponse,
     RerunResponse,
     RetriegeResponse,
+    RootCauseResponse,
     ScreenshotResponse,
     TicketDetail,
 )
@@ -63,8 +65,11 @@ async def list_failures(
     }
     rows, total = await failure_service.get_failures(db, filters, limit, offset)
 
-    # Inject classification category/confidence via a single batch query
+    # Inject classification category/confidence and branch via single batch queries
     cat_map = await failure_service.get_category_map(db, [r.id for r in rows])
+    branch_map = await failure_service.get_branch_map(
+        db, [r.pipeline_event_id for r in rows]
+    )
     items = []
     for row in rows:
         base = FailureListItem.model_validate(row)
@@ -74,6 +79,7 @@ async def list_failures(
                 update={
                     "category": cat_data.get("category"),
                     "confidence": cat_data.get("confidence"),
+                    "branch": branch_map.get(row.pipeline_event_id),
                 }
             )
         )
@@ -288,6 +294,30 @@ async def accept_failure_suggestion(
         accepted=body.accepted,
     )
     return HealSuggestionResponse.model_validate(updated)
+
+
+@router.get("/{failure_id}/root-cause", response_model=RootCauseResponse)
+async def get_failure_root_cause(
+    failure_id: UUID,
+    db: DbSession,
+) -> RootCauseResponse:
+    """Return the most recent root cause analysis for a test failure."""
+    detail = await failure_service.get_failure_detail(db, failure_id)
+    if detail is None:
+        raise HTTPException(status_code=404, detail="failure not found")
+
+    analysis = await RootCauseRepository().get_latest_by_failure_id(db, failure_id)
+    if analysis is None:
+        raise HTTPException(
+            status_code=404, detail="no root cause analysis found for this failure"
+        )
+
+    logger.info(
+        "failures.root_cause.retrieved",
+        failure_id=str(failure_id),
+        analysis_id=str(analysis.id),
+    )
+    return RootCauseResponse.model_validate(analysis)
 
 
 @router.post("/{failure_id}/screenshots", response_model=ScreenshotResponse, status_code=201)

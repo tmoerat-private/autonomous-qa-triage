@@ -11,6 +11,7 @@ from src.agents.prompts.root_cause_prompt import ROOT_CAUSE_SYSTEM_PROMPT
 from src.agents.state import TriageState
 from src.config.settings import get_settings
 from src.db.repositories.failure_repo import FailureRepository
+from src.db.repositories.root_cause_repo import RootCauseRepository
 from src.db.session import get_session_factory
 
 logger = structlog.get_logger(__name__)
@@ -49,7 +50,7 @@ async def root_cause_node(state: TriageState) -> dict:
          classification results.
       3. Invoke Claude with structured output to obtain a RootCauseResult.
 
-    Root cause data is stored only in state — not persisted to the database.
+    Root cause data is persisted to the root_cause_analyses table and also stored in state.
     Downstream nodes (ticket_creator, heal_suggester) consume it from state.
 
     Returns a partial state dict with 'root_cause' set to the last result's
@@ -113,6 +114,18 @@ async def root_cause_node(state: TriageState) -> dict:
                         HumanMessage(content=user_message),
                     ]
                 )
+
+                await RootCauseRepository().create(
+                    session,
+                    test_failure_id=uuid.UUID(failure_id),
+                    pipeline_event_id=uuid.UUID(state["pipeline_event_id"]),
+                    root_cause_summary=result.root_cause_summary,
+                    root_cause_category=result.root_cause_category,
+                    likely_cause_files=result.likely_cause_files,
+                    investigation_steps=result.investigation_steps,
+                    model_used=settings.default_model,
+                )
+                await session.commit()
 
                 last_result = result
                 log.info(

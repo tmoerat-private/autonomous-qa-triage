@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { getFailure, getHealSuggestion, getReleaseScore, getScreenshots } from '../api/client.js'
+import { getFailure, getHealSuggestion, getReleaseScore, getRootCause, getScreenshots } from '../api/client.js'
 import CategoryBadge from '../components/CategoryBadge.jsx'
 import StatusBadge from '../components/StatusBadge.jsx'
 import VisualRegressionPanel from '../components/VisualRegressionPanel.jsx'
@@ -69,6 +69,8 @@ export default function FailureDetail() {
   const [suggestionLoading, setSuggestionLoading] = useState(false)
   const [releaseScore, setReleaseScore] = useState(null)
   const [releaseScoreLoading, setReleaseScoreLoading] = useState(false)
+  const [rootCause, setRootCause] = useState(null)
+  const [rootCauseLoading, setRootCauseLoading] = useState(false)
 
   useEffect(() => {
     setLoading(true)
@@ -96,6 +98,13 @@ export default function FailureDetail() {
       .then((data) => setSuggestion(data))
       .catch(() => setSuggestion(null))
       .finally(() => setSuggestionLoading(false))
+
+    // Fetch root cause analysis (non-fatal)
+    setRootCauseLoading(true)
+    getRootCause(id)
+      .then((data) => setRootCause(data))
+      .catch(() => setRootCause(null))
+      .finally(() => setRootCauseLoading(false))
 
     // Fetch release score only if commit_sha is present (non-fatal)
     if (failure.commit_sha) {
@@ -230,6 +239,54 @@ export default function FailureDetail() {
             )}
           </div>
         </div>
+      </div>
+
+      {/* Root Cause Analysis */}
+      <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
+        <h2 className="text-base font-semibold text-gray-700 mb-3">Root Cause Analysis</h2>
+        {rootCauseLoading ? (
+          <InlineSpinner />
+        ) : rootCause ? (
+          <div className="space-y-4">
+            {/* Category pill */}
+            <div className="flex items-center gap-2">
+              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800 uppercase tracking-wide">
+                {rootCause.root_cause_category?.replace(/_/g, ' ')}
+              </span>
+            </div>
+
+            {/* Summary */}
+            <p className="text-sm text-gray-700">{rootCause.root_cause_summary}</p>
+
+            {/* Likely cause files */}
+            {rootCause.likely_cause_files?.length > 0 && (
+              <div>
+                <p className="text-xs font-medium text-gray-500 mb-1">Likely cause files</p>
+                <ul className="space-y-1">
+                  {rootCause.likely_cause_files.map((f, i) => (
+                    <li key={i} className="font-mono text-xs text-indigo-700 bg-indigo-50 px-2 py-1 rounded">
+                      {f}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {/* Investigation steps */}
+            {rootCause.investigation_steps?.length > 0 && (
+              <div>
+                <p className="text-xs font-medium text-gray-500 mb-1">Investigation steps</p>
+                <ol className="space-y-1 list-decimal list-inside">
+                  {rootCause.investigation_steps.map((step, i) => (
+                    <li key={i} className="text-sm text-gray-600">{step}</li>
+                  ))}
+                </ol>
+              </div>
+            )}
+          </div>
+        ) : (
+          <p className="text-sm text-gray-400">No root cause analysis available yet.</p>
+        )}
       </div>
 
       {/* Heal Suggestion */}

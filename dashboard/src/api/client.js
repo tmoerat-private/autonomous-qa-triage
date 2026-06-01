@@ -29,6 +29,11 @@ export async function getRecentReleaseScores(repository, limit = 5) {
   return res.data
 }
 
+export async function getRootCause(failureId) {
+  const res = await api.get(`/api/v1/failures/${failureId}/root-cause`)
+  return res.data
+}
+
 export async function getReleaseScore(commitSha, repository) {
   const params = repository ? { repository } : {}
   const res = await api.get(`/api/v1/releases/${commitSha}/score`, { params })

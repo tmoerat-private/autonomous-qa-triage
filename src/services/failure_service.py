@@ -135,6 +135,25 @@ async def get_category_map(
     }
 
 
+async def get_branch_map(
+    db: AsyncSession,
+    pipeline_event_ids: list[UUID],
+) -> dict[UUID, str | None]:
+    """Return a mapping of pipeline_event_id → branch for the given event IDs.
+
+    Performs a single batch SELECT to avoid N+1 queries.
+    Returns an empty dict when pipeline_event_ids is empty.
+    """
+    if not pipeline_event_ids:
+        return {}
+    stmt = select(
+        PipelineEvent.id,
+        PipelineEvent.branch,
+    ).where(PipelineEvent.id.in_(pipeline_event_ids))
+    result = await db.execute(stmt)
+    return {row.id: row.branch for row in result}
+
+
 async def get_failure_detail(db: AsyncSession, failure_id: UUID) -> dict | None:
     """Return a detail dict for one TestFailure, or None if not found.
 
