@@ -64,7 +64,8 @@ async def heal_suggester_node(state: TriageState) -> dict:
     log.info("heal_suggester.started")
 
     # --- Skip conditions ---
-    if state.get("root_cause") is None:
+    root_cause: dict | None = state.get("root_cause")
+    if root_cause is None:
         log.info("heal_suggester.skipped", reason="root_cause_missing")
         return {"heal_suggestion": None}
 
@@ -95,8 +96,6 @@ async def heal_suggester_node(state: TriageState) -> dict:
 
     last_result: HealSuggestionResult | None = None
     errors: list[str] = list(state["errors"])
-
-    root_cause = state["root_cause"]
 
     for failure_id in state["failure_ids"]:
         try:
