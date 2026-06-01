@@ -90,6 +90,7 @@ export default function Dashboard() {
     : []
 
   // Format trend dates as MM-DD
+  // API returns {date, count} — a single total per day
   const trendData = trends.map((row) => ({
     ...row,
     label: row.date ? row.date.slice(-5) : '',
@@ -189,18 +190,13 @@ export default function Dashboard() {
                     <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
                     <XAxis dataKey="label" tick={{ fontSize: 11 }} />
                     <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
-                    <Tooltip />
-                    <Legend />
-                    <Line type="monotone" dataKey="product_bug" stroke="#ef4444" dot={false} name="Product Bug" />
-                    <Line type="monotone" dataKey="flaky_test" stroke="#eab308" dot={false} name="Flaky Test" />
-                    <Line type="monotone" dataKey="env_issue" stroke="#f97316" dot={false} name="Env Issue" />
+                    <Tooltip formatter={(v) => [v, 'Failures']} />
                     <Line
                       type="monotone"
-                      dataKey="total"
+                      dataKey="count"
                       stroke="#6366f1"
-                      strokeDasharray="5 5"
                       dot={false}
-                      name="Total"
+                      name="Total Failures"
                     />
                   </LineChart>
                 </ResponsiveContainer>
@@ -220,16 +216,11 @@ export default function Dashboard() {
                     <tr className="border-b border-gray-200">
                       <th className="text-left py-2 pr-4 font-medium text-gray-500 w-8">#</th>
                       <th className="text-left py-2 pr-4 font-medium text-gray-500">Test Name</th>
-                      <th className="text-left py-2 pr-4 font-medium text-gray-500">Failures</th>
-                      <th className="text-left py-2 pr-4 font-medium text-gray-500">Top Category</th>
-                      <th className="text-left py-2 font-medium text-gray-500">Last Seen</th>
+                      <th className="text-left py-2 font-medium text-gray-500">Failures (30d)</th>
                     </tr>
                   </thead>
                   <tbody>
                     {topFailing.slice(0, 10).map((row, i) => {
-                      const topCat = Array.isArray(row.categories) && row.categories.length > 0
-                        ? row.categories[0]
-                        : null
                       const name = row.test_name || ''
                       const truncated = name.length > 60 ? name.slice(0, 60) + '…' : name
                       return (
@@ -241,11 +232,7 @@ export default function Dashboard() {
                           >
                             {truncated}
                           </td>
-                          <td className="py-2 pr-4 font-semibold text-gray-900">{row.failure_count}</td>
-                          <td className="py-2 pr-4">
-                            {topCat ? <CategoryBadge category={topCat} /> : <span className="text-gray-400">—</span>}
-                          </td>
-                          <td className="py-2 text-gray-500">{relativeDate(row.last_failure_at)}</td>
+                          <td className="py-2 font-semibold text-gray-900">{row.count ?? '—'}</td>
                         </tr>
                       )
                     })}
