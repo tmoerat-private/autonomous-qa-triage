@@ -112,6 +112,29 @@ async def get_failures(
     return rows, total
 
 
+async def get_category_map(
+    db: AsyncSession,
+    failure_ids: list[UUID],
+) -> dict[UUID, dict]:
+    """Return a mapping of failure_id → {category, confidence} for the given IDs.
+
+    Performs a single batch SELECT to avoid N+1 queries.
+    Returns an empty dict for failure_ids that have no classification yet.
+    """
+    if not failure_ids:
+        return {}
+    stmt = select(
+        FailureClassification.test_failure_id,
+        FailureClassification.category,
+        FailureClassification.confidence,
+    ).where(FailureClassification.test_failure_id.in_(failure_ids))
+    result = await db.execute(stmt)
+    return {
+        row.test_failure_id: {"category": row.category, "confidence": row.confidence}
+        for row in result
+    }
+
+
 async def get_failure_detail(db: AsyncSession, failure_id: UUID) -> dict | None:
     """Return a detail dict for one TestFailure, or None if not found.
 
@@ -120,6 +143,8 @@ async def get_failure_detail(db: AsyncSession, failure_id: UUID) -> dict | None:
       - classification: FailureClassification | None
       - error_signature_hash: str | None (SHA-256 hex digest from ErrorSignature)
       - ticket: TriageTicket | None
+      - commit_sha: str | None (from linked PipelineEvent)
+      - repository: str | None (from linked PipelineEvent)
     """
     stmt = select(TestFailure).where(TestFailure.id == failure_id)
     result = await db.execute(stmt)
@@ -153,6 +178,11 @@ async def get_failure_detail(db: AsyncSession, failure_id: UUID) -> dict | None:
         if sig is not None:
             error_signature_hash = sig.signature_hash
 
+    # Load PipelineEvent to surface commit_sha and repository
+    event_stmt = select(PipelineEvent).where(PipelineEvent.id == failure.pipeline_event_id)
+    event_result = await db.execute(event_stmt)
+    event = event_result.scalar_one_or_none()
+
     logger.debug(
         "failure_service.get_failure_detail",
         failure_id=str(failure_id),
@@ -165,6 +195,8 @@ async def get_failure_detail(db: AsyncSession, failure_id: UUID) -> dict | None:
         "classification": classification,
         "error_signature_hash": error_signature_hash,
         "ticket": ticket,
+        "commit_sha": event.commit_sha if event is not None else None,
+        "repository": event.repository if event is not None else None,
     }
 
 

@@ -62,7 +62,22 @@ async def list_failures(
         "date_to": date_to,
     }
     rows, total = await failure_service.get_failures(db, filters, limit, offset)
-    items = [FailureListItem.model_validate(row) for row in rows]
+
+    # Inject classification category/confidence via a single batch query
+    cat_map = await failure_service.get_category_map(db, [r.id for r in rows])
+    items = []
+    for row in rows:
+        base = FailureListItem.model_validate(row)
+        cat_data = cat_map.get(row.id, {})
+        items.append(
+            base.model_copy(
+                update={
+                    "category": cat_data.get("category"),
+                    "confidence": cat_data.get("confidence"),
+                }
+            )
+        )
+
     logger.info("failures.list", total=total, limit=limit, offset=offset)
     return PaginatedFailuresResponse(items=items, total=total, limit=limit, offset=offset)
 
@@ -106,6 +121,8 @@ async def get_failure(
             else None
         ),
         error_signature_hash=detail["error_signature_hash"],
+        commit_sha=detail.get("commit_sha"),
+        repository=detail.get("repository"),
     )
 
 

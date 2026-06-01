@@ -4,18 +4,8 @@ const api = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000',
 })
 
-export async function getSummary(period = '7d') {
-  const res = await api.get('/api/v1/dashboard/summary', { params: { period } })
-  return res.data
-}
-
-export async function getTrends(days = 30) {
-  const res = await api.get('/api/v1/dashboard/trends', { params: { days } })
-  return res.data
-}
-
-export async function getTopFailing(days = 7) {
-  const res = await api.get('/api/v1/dashboard/top-failing', { params: { days } })
+export async function getFailure(id) {
+  const res = await api.get(`/api/v1/failures/${id}`)
   return res.data
 }
 
@@ -24,13 +14,24 @@ export async function getFailures(params = {}) {
   return res.data
 }
 
-export async function getFailure(id) {
-  const res = await api.get(`/api/v1/failures/${id}`)
+export async function getHealSuggestion(failureId) {
+  const res = await api.get(`/api/v1/failures/${failureId}/suggestion`)
   return res.data
 }
 
 export async function getHealth() {
   const res = await api.get('/health')
+  return res.data
+}
+
+export async function getRecentReleaseScores(repository, limit = 5) {
+  const res = await api.get('/api/v1/releases/recent', { params: { repository, limit } })
+  return res.data
+}
+
+export async function getReleaseScore(commitSha, repository) {
+  const params = repository ? { repository } : {}
+  const res = await api.get(`/api/v1/releases/${commitSha}/score`, { params })
   return res.data
 }
 
@@ -45,7 +46,17 @@ export function getScreenshotFileUrl(screenshotId) {
   return `${base}/api/v1/failures/screenshots/${screenshotId}/file`
 }
 
-export async function getRecentReleaseScores(repository, limit = 5) {
-  const res = await api.get('/api/v1/releases/recent', { params: { repository, limit } })
+export async function getSummary(period = '7d') {
+  const res = await api.get('/api/v1/dashboard/summary', { params: { period } })
+  return res.data
+}
+
+export async function getTopFailing(days = 7) {
+  const res = await api.get('/api/v1/dashboard/top-failing', { params: { days } })
+  return res.data
+}
+
+export async function getTrends(days = 30) {
+  const res = await api.get('/api/v1/dashboard/trends', { params: { days } })
   return res.data
 }

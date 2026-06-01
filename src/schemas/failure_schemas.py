@@ -22,6 +22,10 @@ class FailureListItem(BaseModel):
     created_at: datetime
     updated_at: datetime
 
+    # Injected from FailureClassification (None when not yet classified)
+    category: str | None = None
+    confidence: float | None = None
+
 
 class PaginatedFailuresResponse(BaseModel):
     """Paginated envelope for failure list results."""
@@ -82,6 +86,10 @@ class FailureDetailResponse(BaseModel):
     classification: ClassificationDetail | None = None
     ticket: TicketDetail | None = None
     error_signature_hash: str | None = None
+
+    # From linked PipelineEvent — used by frontend to fetch release risk score
+    commit_sha: str | None = None
+    repository: str | None = None
 
 
 class RetriegeResponse(BaseModel):
