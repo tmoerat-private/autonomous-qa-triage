@@ -1,7 +1,6 @@
 """Tests for rerun_trigger_node() — mocked CI clients, real test DB."""
 from __future__ import annotations
 
-import uuid
 from contextlib import asynccontextmanager
 from unittest.mock import AsyncMock, MagicMock, patch
 

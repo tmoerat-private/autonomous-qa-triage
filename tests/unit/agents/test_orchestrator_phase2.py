@@ -157,10 +157,16 @@ def test_failure_classifier_leads_to_log_analyzer():
     assert ("failure_classifier", "log_analyzer") in graph.builder.edges
 
 
-def test_log_analyzer_leads_to_duplicate_detector():
-    """log_analyzer → duplicate_detector edge is present."""
+def test_log_analyzer_leads_to_root_cause():
+    """Phase 3: log_analyzer → root_cause edge replaces the old direct link to duplicate_detector."""
     graph = build_triage_graph()
-    assert ("log_analyzer", "duplicate_detector") in graph.builder.edges
+    assert ("log_analyzer", "root_cause") in graph.builder.edges
+
+
+def test_heal_suggester_leads_to_duplicate_detector():
+    """Phase 3: heal_suggester → duplicate_detector edge connects the new nodes to dedup."""
+    graph = build_triage_graph()
+    assert ("heal_suggester", "duplicate_detector") in graph.builder.edges
 
 
 def test_ticket_creator_leads_to_notifier():
@@ -169,13 +175,18 @@ def test_ticket_creator_leads_to_notifier():
     assert ("ticket_creator", "notifier") in graph.builder.edges
 
 
-def test_flaky_detector_has_no_unconditional_outgoing_edge():
-    """flaky_detector exits only via a conditional branch, not a plain edge."""
+def test_flaky_detector_leads_to_rerun_trigger():
+    """Phase 3: flaky_detector → rerun_trigger unconditional edge (rerun_trigger holds the conditional)."""
     graph = build_triage_graph()
-    outgoing_plain = {end for start, end in graph.builder.edges if start == "flaky_detector"}
-    # Plain edges from flaky_detector must be empty — routing is conditional.
+    assert ("flaky_detector", "rerun_trigger") in graph.builder.edges
+
+
+def test_rerun_trigger_has_no_unconditional_outgoing_edge():
+    """Phase 3: rerun_trigger exits only via a conditional branch, not a plain edge."""
+    graph = build_triage_graph()
+    outgoing_plain = {end for start, end in graph.builder.edges if start == "rerun_trigger"}
     assert outgoing_plain == set(), (
-        f"Expected no unconditional edges from flaky_detector, found: {outgoing_plain}"
+        f"Expected no unconditional edges from rerun_trigger, found: {outgoing_plain}"
     )
 
 

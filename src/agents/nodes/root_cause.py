@@ -93,14 +93,18 @@ async def root_cause_node(state: TriageState) -> dict:
                     continue
 
                 classification = state.get("classification")
+                clf_category = classification["category"] if classification else "unknown"
+                clf_confidence = classification["confidence"] if classification else "N/A"
+                clf_reasoning = classification["reasoning"] if classification else "N/A"
+                norm_text = (state.get("normalized_error_text") or "N/A")[:500]
                 user_message = (
                     f"Test name: {failure.test_name}\n"
                     f"Error message: {failure.error_message or 'N/A'}\n"
                     f"Stack trace:\n{(failure.stack_trace or '')[:3000]}\n\n"
-                    f"Classification: {classification['category'] if classification else 'unknown'}\n"
-                    f"Confidence: {classification['confidence'] if classification else 'N/A'}\n"
-                    f"Classification reasoning: {classification['reasoning'] if classification else 'N/A'}\n\n"
-                    f"Error signature (normalized): {state.get('normalized_error_text', 'N/A')[:500]}"
+                    f"Classification: {clf_category}\n"
+                    f"Confidence: {clf_confidence}\n"
+                    f"Classification reasoning: {clf_reasoning}\n\n"
+                    f"Error signature (normalized): {norm_text}"
                 )
 
                 result: RootCauseResult = await structured_llm.ainvoke(  # type: ignore[assignment]

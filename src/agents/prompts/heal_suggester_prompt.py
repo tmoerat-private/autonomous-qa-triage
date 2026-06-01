@@ -19,7 +19,7 @@ Your job is to propose a concrete fix for the issue.
 
 Return:
 - suggestion: 1-3 sentences describing the fix in plain English
-- confidence: 0.0–1.0
+- confidence: 0.0-1.0
 - affected_file: the file path most likely to change (or null if unknown)
 - fix_snippet: a code snippet, diff, or specific line to change (or null if too uncertain)
 
