@@ -55,3 +55,24 @@ class DailyTrend(BaseModel):
 
     date: str
     count: int
+
+
+class ReleaseScoreResponse(BaseModel):
+    """Release risk score for a specific commit."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    commit_sha: str
+    repository: str
+    score: float
+    risk_level: str
+    risk_summary: str | None
+    total_failures: int
+    product_bug_count: int
+    flaky_count: int
+    env_issue_count: int
+    infra_count: int
+    duplicate_count: int
+    avg_confidence: float | None
+    scored_at: datetime

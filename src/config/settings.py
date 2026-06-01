@@ -34,6 +34,9 @@ class Settings(BaseSettings):
     # Phase 3 — autonomous reruns
     enable_auto_rerun: bool = False
 
+    # Phase 3 — autonomous reruns + release scoring
+    release_score_claude_enabled: bool = True
+
     # Phase 3 — screenshot storage
     screenshot_storage_path: str = "uploads/screenshots"
     max_screenshot_size_bytes: int = 10_485_760  # 10 MB

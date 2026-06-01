@@ -57,6 +57,9 @@ class TriageState(TypedDict):
     visual_analysis: dict | None
     screenshot_ids: list[str]
 
+    # Set by release_scorer node (Phase 3 Sprint 7)
+    release_score: dict | None
+
     # Observability
     agent_run_id: str | None
     errors: list[str]               # non-fatal errors accumulated during triage
@@ -109,6 +112,8 @@ def initial_state(pipeline_event_id: str) -> TriageState:
         # visual_analyzer outputs (Phase 3 Sprint 6)
         visual_analysis=None,
         screenshot_ids=[],
+        # release_scorer outputs (Phase 3 Sprint 7)
+        release_score=None,
         # observability
         agent_run_id=None,
         errors=[],

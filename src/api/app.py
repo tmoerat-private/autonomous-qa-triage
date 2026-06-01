@@ -5,6 +5,7 @@ from fastapi.responses import JSONResponse
 
 from src.api.middleware import LoggingMiddleware, RateLimitMiddleware, RequestIdMiddleware
 from src.api.routes.agents import router as agent_runs_router
+from src.api.routes.releases import router as releases_router
 from src.api.routes.dashboard import router as dashboard_router
 from src.api.routes.failures import router as failures_router
 from src.api.routes.failures import screenshots_router
@@ -60,6 +61,7 @@ def create_app() -> FastAPI:
     app.include_router(screenshots_router, prefix="/api/v1")
     app.include_router(dashboard_router, prefix="/api/v1")
     app.include_router(agent_runs_router, prefix="/api/v1")
+    app.include_router(releases_router, prefix="/api/v1")
 
     # Prometheus metrics endpoint
     mount_metrics_endpoint(app)

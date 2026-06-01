@@ -5,6 +5,7 @@ from src.models.failure_classification import FailureClassification
 from src.models.heal_suggestion import HealSuggestion
 from src.models.notification import Notification
 from src.models.pipeline_event import PipelineEvent
+from src.models.release_score import ReleaseScore
 from src.models.rerun_request import RerunRequest
 from src.models.test_failure import TestFailure
 from src.models.test_screenshot import TestScreenshot
@@ -18,6 +19,7 @@ __all__ = [
     "HealSuggestion",
     "Notification",
     "PipelineEvent",
+    "ReleaseScore",
     "RerunRequest",
     "TestFailure",
     "TestScreenshot",

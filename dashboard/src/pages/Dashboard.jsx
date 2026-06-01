@@ -3,8 +3,9 @@ import {
   PieChart, Pie, Cell, Tooltip, Legend,
   LineChart, Line, XAxis, YAxis, CartesianGrid, ResponsiveContainer,
 } from 'recharts'
-import { getSummary, getTrends, getTopFailing } from '../api/client.js'
+import { getSummary, getTrends, getTopFailing, getRecentReleaseScores } from '../api/client.js'
 import CategoryBadge from '../components/CategoryBadge.jsx'
+import ReleaseRiskWidget from '../components/ReleaseRiskWidget.jsx'
 
 const CATEGORY_COLORS = {
   product_bug: '#ef4444',
@@ -56,6 +57,7 @@ export default function Dashboard() {
   const [summary, setSummary] = useState(null)
   const [trends, setTrends] = useState([])
   const [topFailing, setTopFailing] = useState([])
+  const [releaseScores, setReleaseScores] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
@@ -71,6 +73,10 @@ export default function Dashboard() {
       setSummary(s)
       setTrends(tr)
       setTopFailing(tf)
+      // Fetch release scores non-fatally (won't exist until real triage runs)
+      getRecentReleaseScores('org/api-service', 5)
+        .then(setReleaseScores)
+        .catch(() => {})
     } catch (err) {
       setError(err?.response?.data?.detail || err.message || 'Failed to load dashboard data')
     } finally {
@@ -240,6 +246,11 @@ export default function Dashboard() {
                 </table>
               </div>
             )}
+          </div>
+
+          {/* Release Risk */}
+          <div className="mt-6">
+            <ReleaseRiskWidget scores={releaseScores} />
           </div>
         </>
       )}

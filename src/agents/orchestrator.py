@@ -14,6 +14,7 @@ from src.agents.nodes.pipeline_monitor import pipeline_monitor_node
 from src.agents.nodes.rerun_trigger import rerun_trigger_node
 from src.agents.nodes.root_cause import root_cause_node
 from src.agents.nodes.ticket_creator import ticket_creator_node
+from src.agents.nodes.release_scorer import release_scorer_node
 from src.agents.nodes.visual_analyzer import visual_analyzer_node
 from src.agents.state import TriageState
 
@@ -57,6 +58,8 @@ def build_triage_graph() -> CompiledStateGraph:
                                                            ↓
                                                         learner
                                                            ↓
+                                                    release_scorer
+                                                           ↓
                                                           END
     """
     graph: StateGraph = StateGraph(TriageState)
@@ -73,6 +76,7 @@ def build_triage_graph() -> CompiledStateGraph:
     graph.add_node("ticket_creator", ticket_creator_node)
     graph.add_node("notifier", notifier_node)
     graph.add_node("learner", learner_node)
+    graph.add_node("release_scorer", release_scorer_node)
 
     graph.set_entry_point("pipeline_monitor")
     graph.add_edge("pipeline_monitor", "failure_classifier")
@@ -90,7 +94,8 @@ def build_triage_graph() -> CompiledStateGraph:
     )
     graph.add_edge("ticket_creator", "notifier")
     graph.add_edge("notifier", "learner")
-    graph.add_edge("learner", END)
+    graph.add_edge("learner", "release_scorer")
+    graph.add_edge("release_scorer", END)
 
     return graph.compile()
 
