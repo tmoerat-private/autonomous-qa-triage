@@ -287,7 +287,6 @@ async def test_release_scorer_claude_failure(db_session: AsyncSession):
     session_factory = _make_session_factory(db_session)
 
     # Claude raises on ainvoke
-    mock_response = MagicMock()
     mock_llm_instance = MagicMock()
     mock_llm_instance.ainvoke = AsyncMock(side_effect=Exception("API down"))
     mock_llm_cls = MagicMock(return_value=mock_llm_instance)

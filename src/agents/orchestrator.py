@@ -11,10 +11,10 @@ from src.agents.nodes.learner import learner_node
 from src.agents.nodes.log_analyzer import log_analyzer_node
 from src.agents.nodes.notifier import notifier_node
 from src.agents.nodes.pipeline_monitor import pipeline_monitor_node
+from src.agents.nodes.release_scorer import release_scorer_node
 from src.agents.nodes.rerun_trigger import rerun_trigger_node
 from src.agents.nodes.root_cause import root_cause_node
 from src.agents.nodes.ticket_creator import ticket_creator_node
-from src.agents.nodes.release_scorer import release_scorer_node
 from src.agents.nodes.visual_analyzer import visual_analyzer_node
 from src.agents.state import TriageState
 

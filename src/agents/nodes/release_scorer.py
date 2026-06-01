@@ -27,7 +27,11 @@ def _template_summary(
         f"This commit has {total} test failure(s) including {bugs} product bug(s) "
         f"and {flaky} flaky test(s). "
         f"Risk score: {score:.0f}/100 ({level}). "
-        f"{'Recommend holding release for investigation.' if level in ('high', 'critical') else 'Release appears safe to proceed.'}"
+        + (
+            "Recommend holding release for investigation."
+            if level in ("high", "critical")
+            else "Release appears safe to proceed."
+        )
     )
 
 

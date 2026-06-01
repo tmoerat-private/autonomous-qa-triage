@@ -6,9 +6,9 @@ into the FastAPI dependency so no separate mock is needed for DB calls.
 """
 from __future__ import annotations
 
-import pytest
 from datetime import UTC, datetime, timedelta
 
+import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.models.release_score import ReleaseScore
