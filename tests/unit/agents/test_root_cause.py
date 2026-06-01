@@ -13,6 +13,9 @@ from src.agents.state import initial_state
 from src.models.pipeline_event import PipelineEvent
 from src.models.test_failure import TestFailure
 
+# Valid UUID used as pipeline_event_id in state (the node now calls uuid.UUID() on it)
+_TEST_PIPELINE_EVENT_ID = "00000000-0000-0000-0000-000000000001"
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -89,7 +92,7 @@ def _make_session_factory(test_session: AsyncSession):
 async def test_root_cause_success(db_session: AsyncSession):
     """Node analyzes a failure and returns root_cause dict with expected values."""
     failure = await _make_failure(db_session)
-    state = {**initial_state("some-event-id"), "failure_ids": [str(failure.id)]}
+    state = {**initial_state(_TEST_PIPELINE_EVENT_ID), "failure_ids": [str(failure.id)]}
 
     mock_llm_cls = _make_mock_llm(
         root_cause_summary="DB pool exhausted",
@@ -118,7 +121,7 @@ async def test_root_cause_success(db_session: AsyncSession):
 
 async def test_root_cause_empty_failure_ids(db_session: AsyncSession):
     """Node returns root_cause=None and never calls LLM when failure_ids is empty."""
-    state = {**initial_state("some-event-id"), "failure_ids": []}
+    state = {**initial_state(_TEST_PIPELINE_EVENT_ID), "failure_ids": []}
     mock_llm_cls = _make_mock_llm()
 
     with (
@@ -138,7 +141,7 @@ async def test_root_cause_empty_failure_ids(db_session: AsyncSession):
 async def test_root_cause_failure_not_found(db_session: AsyncSession):
     """Node appends an error and does not crash when failure UUID does not exist."""
     non_existent_id = str(uuid.uuid4())
-    state = {**initial_state("some-event-id"), "failure_ids": [non_existent_id]}
+    state = {**initial_state(_TEST_PIPELINE_EVENT_ID), "failure_ids": [non_existent_id]}
     mock_llm_cls = _make_mock_llm()
 
     with (
@@ -156,7 +159,7 @@ async def test_root_cause_failure_not_found(db_session: AsyncSession):
 async def test_root_cause_llm_exception(db_session: AsyncSession):
     """Node captures LLM timeout into errors without raising; root_cause is None."""
     failure = await _make_failure(db_session)
-    state = {**initial_state("some-event-id"), "failure_ids": [str(failure.id)]}
+    state = {**initial_state(_TEST_PIPELINE_EVENT_ID), "failure_ids": [str(failure.id)]}
 
     mock_chain = MagicMock()
     mock_chain.ainvoke = AsyncMock(side_effect=Exception("timeout"))
@@ -181,7 +184,7 @@ async def test_root_cause_includes_classification_context(db_session: AsyncSessi
     """HumanMessage passed to LLM contains classification category when present in state."""
     failure = await _make_failure(db_session)
     state = {
-        **initial_state("some-event-id"),
+        **initial_state(_TEST_PIPELINE_EVENT_ID),
         "failure_ids": [str(failure.id)],
         "classification": {
             "category": "product_bug",
@@ -214,7 +217,7 @@ async def test_root_cause_includes_classification_context(db_session: AsyncSessi
 async def test_root_cause_result_structure(db_session: AsyncSession):
     """Returned root_cause dict has all four expected keys."""
     failure = await _make_failure(db_session)
-    state = {**initial_state("some-event-id"), "failure_ids": [str(failure.id)]}
+    state = {**initial_state(_TEST_PIPELINE_EVENT_ID), "failure_ids": [str(failure.id)]}
 
     mock_llm_cls = _make_mock_llm(
         root_cause_summary="Race condition in auth middleware",
