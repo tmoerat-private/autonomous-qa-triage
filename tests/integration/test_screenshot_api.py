@@ -11,7 +11,7 @@ from src.models.pipeline_event import PipelineEvent
 from src.models.test_failure import TestFailure
 from src.models.test_screenshot import TestScreenshot
 
-# Minimal 1×1 transparent PNG (67 bytes — well-formed, broadly accepted by httpx)
+# Minimal 1x1 transparent PNG (67 bytes -- well-formed, broadly accepted by httpx)
 _PNG_BYTES = (
     b"\x89PNG\r\n\x1a\n"
     b"\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01"

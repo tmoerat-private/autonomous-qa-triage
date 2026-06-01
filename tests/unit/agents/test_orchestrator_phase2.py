@@ -157,10 +157,16 @@ def test_failure_classifier_leads_to_log_analyzer():
     assert ("failure_classifier", "log_analyzer") in graph.builder.edges
 
 
-def test_log_analyzer_leads_to_root_cause():
-    """Phase 3: log_analyzer → root_cause edge replaces the old direct link to duplicate_detector."""
+def test_log_analyzer_leads_to_visual_analyzer():
+    """Phase 3 Sprint 6: log_analyzer → visual_analyzer (inserted before root_cause)."""
     graph = build_triage_graph()
-    assert ("log_analyzer", "root_cause") in graph.builder.edges
+    assert ("log_analyzer", "visual_analyzer") in graph.builder.edges
+
+
+def test_visual_analyzer_leads_to_root_cause():
+    """Phase 3 Sprint 6: visual_analyzer → root_cause edge is present."""
+    graph = build_triage_graph()
+    assert ("visual_analyzer", "root_cause") in graph.builder.edges
 
 
 def test_heal_suggester_leads_to_duplicate_detector():

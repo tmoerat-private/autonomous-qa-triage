@@ -32,7 +32,7 @@ class TestScreenshot(UUIDMixin, TimestampMixin, Base):
     )
 
     # Relationships
-    test_failure: Mapped["TestFailure"] = relationship(
+    test_failure: Mapped[TestFailure] = relationship(
         "TestFailure",
         lazy="selectin",
     )
