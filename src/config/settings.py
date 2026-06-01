@@ -34,6 +34,10 @@ class Settings(BaseSettings):
     # Phase 3 — autonomous reruns
     enable_auto_rerun: bool = False
 
+    # Phase 3 — screenshot storage
+    screenshot_storage_path: str = "uploads/screenshots"
+    max_screenshot_size_bytes: int = 10_485_760  # 10 MB
+
     # AI
     anthropic_api_key: str = ""
     default_model: str = "claude-sonnet-4-20250514"

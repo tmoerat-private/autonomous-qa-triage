@@ -7,6 +7,7 @@ from src.models.notification import Notification
 from src.models.pipeline_event import PipelineEvent
 from src.models.rerun_request import RerunRequest
 from src.models.test_failure import TestFailure
+from src.models.test_screenshot import TestScreenshot
 from src.models.triage_ticket import TriageTicket
 
 __all__ = [
@@ -19,6 +20,7 @@ __all__ = [
     "PipelineEvent",
     "RerunRequest",
     "TestFailure",
+    "TestScreenshot",
     "TimestampMixin",
     "TriageTicket",
     "UUIDMixin",

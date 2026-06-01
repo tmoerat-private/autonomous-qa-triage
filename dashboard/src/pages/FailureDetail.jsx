@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { getFailure } from '../api/client.js'
+import { getFailure, getScreenshots } from '../api/client.js'
 import CategoryBadge from '../components/CategoryBadge.jsx'
 import StatusBadge from '../components/StatusBadge.jsx'
+import VisualRegressionPanel from '../components/VisualRegressionPanel.jsx'
 
 function Spinner() {
   return (
@@ -47,12 +48,19 @@ export default function FailureDetail() {
   const [failure, setFailure] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  const [screenshots, setScreenshots] = useState([])
 
   useEffect(() => {
     setLoading(true)
     setError(null)
-    getFailure(id)
-      .then((data) => setFailure(data))
+    Promise.all([
+      getFailure(id),
+      getScreenshots(id).catch(() => []),  // non-fatal if no screenshots
+    ])
+      .then(([data, shots]) => {
+        setFailure(data)
+        setScreenshots(shots)
+      })
       .catch((err) => {
         setError(err?.response?.data?.detail || err.message || 'Failed to load failure details')
       })
@@ -181,6 +189,12 @@ export default function FailureDetail() {
           </div>
         </div>
       </div>
+
+      {/* Visual Analysis */}
+      <VisualRegressionPanel
+        screenshots={screenshots}
+        visualAnalysis={failure.visual_analysis || null}
+      />
 
       {/* Agent Run Timeline */}
       <div className="bg-white rounded-lg shadow-sm p-6">

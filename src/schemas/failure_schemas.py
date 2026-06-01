@@ -115,3 +115,17 @@ class RerunResponse(BaseModel):
     provider: str
     job_id: str | None
     failure_id: str
+
+
+class ScreenshotResponse(BaseModel):
+    """Screenshot metadata returned by the upload and list endpoints."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    test_failure_id: uuid.UUID
+    original_filename: str
+    content_type: str
+    storage_path: str
+    file_size_bytes: int
+    created_at: datetime

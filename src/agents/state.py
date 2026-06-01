@@ -53,6 +53,10 @@ class TriageState(TypedDict):
     rerun_triggered: bool
     rerun_job_id: str | None
 
+    # Set by visual_analyzer node (Phase 3 Sprint 6)
+    visual_analysis: dict | None
+    screenshot_ids: list[str]
+
     # Observability
     agent_run_id: str | None
     errors: list[str]               # non-fatal errors accumulated during triage
@@ -102,6 +106,9 @@ def initial_state(pipeline_event_id: str) -> TriageState:
         # rerun_trigger outputs (Phase 3)
         rerun_triggered=False,
         rerun_job_id=None,
+        # visual_analyzer outputs (Phase 3 Sprint 6)
+        visual_analysis=None,
+        screenshot_ids=[],
         # observability
         agent_run_id=None,
         errors=[],

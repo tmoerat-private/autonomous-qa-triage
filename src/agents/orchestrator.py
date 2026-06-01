@@ -14,6 +14,7 @@ from src.agents.nodes.pipeline_monitor import pipeline_monitor_node
 from src.agents.nodes.rerun_trigger import rerun_trigger_node
 from src.agents.nodes.root_cause import root_cause_node
 from src.agents.nodes.ticket_creator import ticket_creator_node
+from src.agents.nodes.visual_analyzer import visual_analyzer_node
 from src.agents.state import TriageState
 
 
@@ -37,7 +38,7 @@ def build_triage_graph() -> CompiledStateGraph:
 
     Graph topology (Phase 3):
 
-        pipeline_monitor → failure_classifier → log_analyzer → root_cause
+        pipeline_monitor → failure_classifier → log_analyzer → visual_analyzer → root_cause
                                                                      ↓
                                                             heal_suggester
                                                                      ↓
@@ -63,6 +64,7 @@ def build_triage_graph() -> CompiledStateGraph:
     graph.add_node("pipeline_monitor", pipeline_monitor_node)
     graph.add_node("failure_classifier", failure_classifier_node)
     graph.add_node("log_analyzer", log_analyzer_node)
+    graph.add_node("visual_analyzer", visual_analyzer_node)
     graph.add_node("root_cause", root_cause_node)
     graph.add_node("heal_suggester", heal_suggester_node)
     graph.add_node("duplicate_detector", duplicate_detector_node)
@@ -75,7 +77,8 @@ def build_triage_graph() -> CompiledStateGraph:
     graph.set_entry_point("pipeline_monitor")
     graph.add_edge("pipeline_monitor", "failure_classifier")
     graph.add_edge("failure_classifier", "log_analyzer")
-    graph.add_edge("log_analyzer", "root_cause")
+    graph.add_edge("log_analyzer", "visual_analyzer")
+    graph.add_edge("visual_analyzer", "root_cause")
     graph.add_edge("root_cause", "heal_suggester")
     graph.add_edge("heal_suggester", "duplicate_detector")
     graph.add_edge("duplicate_detector", "flaky_detector")

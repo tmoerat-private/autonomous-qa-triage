@@ -7,6 +7,7 @@ from src.api.middleware import LoggingMiddleware, RateLimitMiddleware, RequestId
 from src.api.routes.agents import router as agent_runs_router
 from src.api.routes.dashboard import router as dashboard_router
 from src.api.routes.failures import router as failures_router
+from src.api.routes.failures import screenshots_router
 from src.api.routes.health import router as health_router
 from src.api.routes.webhooks import router as webhook_router
 from src.config.logging_config import configure_logging
@@ -56,6 +57,7 @@ def create_app() -> FastAPI:
     app.include_router(health_router)
     app.include_router(webhook_router, prefix="/api/v1")
     app.include_router(failures_router, prefix="/api/v1")
+    app.include_router(screenshots_router, prefix="/api/v1")
     app.include_router(dashboard_router, prefix="/api/v1")
     app.include_router(agent_runs_router, prefix="/api/v1")
 

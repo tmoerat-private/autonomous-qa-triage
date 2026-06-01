@@ -33,3 +33,19 @@ export async function getHealth() {
   const res = await api.get('/health')
   return res.data
 }
+
+export async function getScreenshots(failureId) {
+  const res = await api.get(`/api/v1/failures/${failureId}/screenshots`)
+  return res.data
+}
+
+export function getScreenshotFileUrl(screenshotId) {
+  // Returns the URL string for use as an <img> src — not an async call
+  const base = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
+  return `${base}/api/v1/failures/screenshots/${screenshotId}/file`
+}
+
+export async function getRecentReleaseScores(repository, limit = 5) {
+  const res = await api.get('/api/v1/releases/recent', { params: { repository, limit } })
+  return res.data
+}

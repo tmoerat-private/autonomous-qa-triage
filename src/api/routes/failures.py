@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 from datetime import datetime
+from pathlib import Path
 from uuid import UUID
 
 import httpx
 import structlog
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, File, HTTPException, Query, UploadFile
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 from src.api.dependencies import DbSession
@@ -13,6 +15,7 @@ from src.config.settings import get_settings
 from src.db.repositories.heal_suggestion_repo import HealSuggestionRepository
 from src.db.repositories.pipeline_repo import PipelineEventRepository
 from src.db.repositories.rerun_repo import RerunRepository
+from src.db.repositories.screenshot_repo import ScreenshotRepository
 from src.schemas.failure_schemas import (
     ClassificationDetail,
     FailureDetailResponse,
@@ -21,9 +24,11 @@ from src.schemas.failure_schemas import (
     PaginatedFailuresResponse,
     RerunResponse,
     RetriegeResponse,
+    ScreenshotResponse,
     TicketDetail,
 )
 from src.services import failure_service
+from src.services.screenshot_service import save_screenshot
 from src.workers.tasks import run_triage_pipeline
 
 
@@ -266,3 +271,73 @@ async def accept_failure_suggestion(
         accepted=body.accepted,
     )
     return HealSuggestionResponse.model_validate(updated)
+
+
+@router.post("/{failure_id}/screenshots", response_model=ScreenshotResponse, status_code=201)
+async def upload_screenshot(
+    failure_id: UUID,
+    db: DbSession,
+    file: UploadFile = File(...),
+) -> ScreenshotResponse:
+    """Upload a screenshot and associate it with a test failure."""
+    detail = await failure_service.get_failure_detail(db, failure_id)
+    if detail is None:
+        raise HTTPException(status_code=404, detail="failure not found")
+
+    data = await file.read()
+
+    try:
+        screenshot = await save_screenshot(
+            db,
+            failure_id,
+            file.filename or "screenshot",
+            file.content_type or "image/png",
+            data,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    await db.commit()
+
+    logger.info("failures.screenshot.uploaded", failure_id=str(failure_id))
+    return ScreenshotResponse.model_validate(screenshot)
+
+
+@router.get("/{failure_id}/screenshots", response_model=list[ScreenshotResponse])
+async def list_screenshots(
+    failure_id: UUID,
+    db: DbSession,
+) -> list[ScreenshotResponse]:
+    """Return all screenshots associated with a test failure."""
+    detail = await failure_service.get_failure_detail(db, failure_id)
+    if detail is None:
+        raise HTTPException(status_code=404, detail="failure not found")
+
+    screenshots = await ScreenshotRepository().get_by_failure_id(db, failure_id)
+    return [ScreenshotResponse.model_validate(s) for s in screenshots]
+
+
+# Separate router so the file-serving endpoint lives at
+# GET /api/v1/screenshots/{screenshot_id}/file  (not nested under /failures).
+screenshots_router = APIRouter(prefix="/screenshots", tags=["screenshots"])
+
+
+@screenshots_router.get("/{screenshot_id}/file")
+async def get_screenshot_file(
+    screenshot_id: UUID,
+    db: DbSession,
+) -> FileResponse:
+    """Stream a screenshot file by its ID."""
+    screenshot = await ScreenshotRepository().get_by_id(db, screenshot_id)
+    if screenshot is None:
+        raise HTTPException(status_code=404, detail="screenshot not found")
+
+    path = Path(screenshot.storage_path)
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="screenshot file not found on disk")
+
+    return FileResponse(
+        path=str(path),
+        media_type=screenshot.content_type,
+        filename=screenshot.original_filename,
+    )
