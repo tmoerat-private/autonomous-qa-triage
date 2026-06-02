@@ -11,9 +11,10 @@ execution or database access occurs.
 """
 from __future__ import annotations
 
+from unittest.mock import AsyncMock, patch
+
 import pytest
 import structlog.testing
-from unittest.mock import AsyncMock, patch
 
 from src.agents.state import initial_state
 from src.services.triage_service import run_triage
@@ -80,9 +81,8 @@ async def test_run_triage_logs_completion():
     with patch(
         "src.services.triage_service.triage_graph",
         ainvoke=AsyncMock(return_value=final_state),
-    ):
-        with structlog.testing.capture_logs() as captured:
-            await run_triage(_PIPELINE_EVENT_ID)
+    ), structlog.testing.capture_logs() as captured:
+        await run_triage(_PIPELINE_EVENT_ID)
 
     event_ids = [entry.get("pipeline_event_id") for entry in captured]
     assert _PIPELINE_EVENT_ID in event_ids
@@ -105,9 +105,8 @@ async def test_run_triage_propagates_graph_errors():
     with patch(
         "src.services.triage_service.triage_graph",
         ainvoke=AsyncMock(side_effect=RuntimeError("graph execution failed")),
-    ):
-        with pytest.raises(RuntimeError, match="graph execution failed"):
-            await run_triage(_PIPELINE_EVENT_ID)
+    ), pytest.raises(RuntimeError, match="graph execution failed"):
+        await run_triage(_PIPELINE_EVENT_ID)
 
 
 # ===========================================================================
@@ -129,9 +128,8 @@ async def test_run_triage_handles_duplicate_result():
     with patch(
         "src.services.triage_service.triage_graph",
         ainvoke=AsyncMock(return_value=duplicate_state),
-    ):
-        with structlog.testing.capture_logs() as captured:
-            result = await run_triage(_PIPELINE_EVENT_ID)
+    ), structlog.testing.capture_logs() as captured:
+        result = await run_triage(_PIPELINE_EVENT_ID)
 
     assert result["is_duplicate"] is True
     assert result["duplicate_of_id"] == "existing-failure-uuid"

@@ -11,7 +11,7 @@ Covers:
 
 All tests patch `get_settings` so no .env file or real secret is required.
 The Celery task is patched with MagicMock so no broker is needed.
-Tests 1–6 also patch PipelineEventRepository.create to avoid a DB round-trip
+Tests 1-6 also patch PipelineEventRepository.create to avoid a DB round-trip
 where the assertion is about service behavior, not persistence.
 Test 7 uses the real `db_session` fixture to verify persistence end-to-end.
 """

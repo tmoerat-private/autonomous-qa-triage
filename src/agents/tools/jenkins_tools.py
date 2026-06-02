@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-import structlog
 import httpx
+import structlog
 from langchain_core.tools import tool
 
 from src.config.settings import get_settings
@@ -49,7 +49,7 @@ async def get_build_console_log(job_name: str, build_number: int) -> str:
             f"Error fetching console log for {job_name}#{build_number}: "
             f"HTTP {exc.response.status_code} — {exc.response.text[:200]}"
         )
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         logger.error(
             "jenkins_tool.get_build_console_log.unexpected_error",
             job_name=job_name,
@@ -131,7 +131,7 @@ async def get_build_test_report(job_name: str, build_number: int) -> dict:
                 f"{job_name}#{build_number}"
             )
         }
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         logger.error(
             "jenkins_tool.get_build_test_report.unexpected_error",
             job_name=job_name,
@@ -216,7 +216,7 @@ async def get_build_parameters(job_name: str, build_number: int) -> dict:
                 f"{job_name}#{build_number}"
             )
         }
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         logger.error(
             "jenkins_tool.get_build_parameters.unexpected_error",
             job_name=job_name,
@@ -305,7 +305,7 @@ async def get_recent_build_history(job_name: str, limit: int = 10) -> list[dict]
                 )
             }
         ]
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         logger.error(
             "jenkins_tool.get_recent_build_history.unexpected_error",
             job_name=job_name,
@@ -410,7 +410,7 @@ async def trigger_build_rerun(job_name: str, build_number: int) -> dict:
                 f"{job_name}#{build_number}: {exc.response.text[:200]}"
             ),
         }
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         logger.error(
             "jenkins_tool.trigger_build_rerun.unexpected_error",
             job_name=job_name,

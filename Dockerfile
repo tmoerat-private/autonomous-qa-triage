@@ -1,7 +1,7 @@
 # Stage 1: builder — install dependencies into a virtual environment
 FROM python:3.12-slim AS builder
 WORKDIR /app
-RUN pip install --no-cache-dir uv
+RUN pip install --no-cache-dir "uv==0.5.30"
 COPY pyproject.toml uv.lock* ./
 RUN uv sync --no-dev --frozen
 

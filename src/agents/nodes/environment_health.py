@@ -140,10 +140,7 @@ async def environment_health_node(state: TriageState) -> dict:
 
     # ── 1. Short-circuit on pre-existing env_issue classification ──────────────
     classification: dict | None = state.get("classification")  # type: ignore[assignment]
-    if isinstance(classification, dict):
-        category = classification.get("category", "")
-    else:
-        category = ""
+    category = classification.get("category", "") if isinstance(classification, dict) else ""
 
     if category == "env_issue":
         log.info("environment_health.short_circuit", reason="classification=env_issue")

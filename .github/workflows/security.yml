@@ -49,10 +49,10 @@ jobs:
 
       - name: Scan for secrets (pull request diff only)
         if: github.event_name == 'pull_request'
-        uses: trufflesecurity/trufflehog-actions-scan@main
+        uses: trufflesecurity/trufflehog@main
         with:
           extra_args: --since-commit HEAD~1 --branch HEAD
 
-      - name: Scan full repository (push to main)
+      - name: Scan full repository (push to main / schedule)
         if: github.event_name != 'pull_request'
-        uses: trufflesecurity/trufflehog-actions-scan@main
+        uses: trufflesecurity/trufflehog@main

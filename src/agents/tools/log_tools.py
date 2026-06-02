@@ -15,7 +15,6 @@ import re
 
 from langchain_core.tools import tool
 
-
 # ---------------------------------------------------------------------------
 # Tool 1: normalize_error_signature
 # ---------------------------------------------------------------------------
@@ -162,7 +161,8 @@ def extract_stack_frames(stack_trace: str) -> list[dict]:
                 ):
                     stripped = next_line.strip()
                     # Avoid treating exception lines as code snippets
-                    if stripped and not stripped.startswith("Traceback") and "Error:" not in stripped:
+                    is_exception = stripped.startswith("Traceback") or "Error:" in stripped
+                    if stripped and not is_exception:
                         code_snippet = stripped
                         i += 1  # consume the snippet line
 

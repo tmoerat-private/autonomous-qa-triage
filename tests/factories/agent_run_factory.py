@@ -12,7 +12,7 @@ Usage (persisted — test_failure must already be flushed):
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import factory
 
@@ -40,7 +40,7 @@ class AgentRunFactory(factory.Factory):
     status = AgentRunStatus.COMPLETED
     input_summary = "Received failure event with 1 test failure."
     output_summary = "Classification complete: product_bug (confidence=0.92)."
-    started_at = factory.LazyFunction(lambda: datetime.now(tz=timezone.utc))
-    completed_at = factory.LazyFunction(lambda: datetime.now(tz=timezone.utc))
+    started_at = factory.LazyFunction(lambda: datetime.now(tz=UTC))
+    completed_at = factory.LazyFunction(lambda: datetime.now(tz=UTC))
     tokens_used = factory.Faker("random_int", min=200, max=3000)
     duration_ms = factory.Faker("random_int", min=500, max=15000)
