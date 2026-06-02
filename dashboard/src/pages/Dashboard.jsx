@@ -70,9 +70,9 @@ function ErrorCard({ message }) {
   return (
     <div
       style={{
-        background: '#3f1515',
+        background: 'var(--danger-bg)',
         border: '1px solid var(--danger)',
-        color: '#fca5a5',
+        color: 'var(--danger-fg)',
         padding: '12px 16px',
         borderRadius: 8,
         marginBottom: 16,
@@ -381,8 +381,8 @@ export default function Dashboard() {
                           <td
                             style={{
                               padding: '8px 12px',
-                              color: 'var(--text-primary)',
-                              fontFamily: 'monospace',
+                              color: 'var(--accent-light)',
+                              fontFamily: 'var(--font-mono)',
                               fontSize: 12,
                             }}
                             title={name}

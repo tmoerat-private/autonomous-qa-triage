@@ -1,6 +1,22 @@
 import React, { useEffect, useState } from 'react'
 import { NavLink, Outlet } from 'react-router-dom'
 import { getHealth } from '../api/client.js'
+import { useTheme } from '../theme/ThemeContext.jsx'
+
+// Sun / moon glyphs for the theme toggle
+const SunIcon = (
+  <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <circle cx="12" cy="12" r="4" strokeWidth={2} />
+    <path strokeLinecap="round" strokeWidth={2}
+      d="M12 2v2m0 16v2M4.93 4.93l1.41 1.41m11.32 11.32l1.41 1.41M2 12h2m16 0h2M4.93 19.07l1.41-1.41m11.32-11.32l1.41-1.41" />
+  </svg>
+)
+const MoonIcon = (
+  <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+      d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z" />
+  </svg>
+)
 
 const NAV_ITEMS = [
   {
@@ -60,6 +76,7 @@ const NAV_ITEMS = [
 
 export default function Layout() {
   const [healthy, setHealthy] = useState(null)
+  const { theme, toggleTheme } = useTheme()
 
   useEffect(() => {
     function check() {
@@ -128,13 +145,47 @@ export default function Layout() {
           ))}
         </nav>
 
-        {/* Footer — connection status */}
+        {/* Footer — theme toggle + connection status */}
         <div
           style={{
-            padding: '14px 16px',
+            padding: '12px 16px 14px',
             borderTop: '1px solid var(--border)',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 12,
           }}
         >
+          <button
+            onClick={toggleTheme}
+            title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              width: '100%',
+              padding: '7px 10px',
+              borderRadius: 6,
+              fontSize: 13,
+              fontWeight: 500,
+              cursor: 'pointer',
+              color: 'var(--text-muted)',
+              background: 'transparent',
+              border: '1px solid var(--border)',
+              transition: 'background 150ms, color 150ms',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = 'var(--bg-elevated)'
+              e.currentTarget.style.color = 'var(--text-primary)'
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = 'transparent'
+              e.currentTarget.style.color = 'var(--text-muted)'
+            }}
+          >
+            {theme === 'dark' ? SunIcon : MoonIcon}
+            {theme === 'dark' ? 'Light mode' : 'Dark mode'}
+          </button>
+
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <span
               style={{

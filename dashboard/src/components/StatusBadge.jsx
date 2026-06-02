@@ -1,11 +1,13 @@
 import React from 'react'
 
-const STATUS_CLASSES = {
-  new: 'bg-sky-100 text-sky-800',
-  triaging: 'bg-amber-100 text-amber-800',
-  triaged: 'bg-green-100 text-green-800',
-  resolved: 'bg-emerald-100 text-emerald-800',
-  ignored: 'bg-gray-100 text-gray-500',
+// Map each status to a theme-aware tone token (defined in index.css for both
+// light and dark themes), so badges re-theme on toggle.
+const STATUS_TONE = {
+  new:      'sky',
+  triaging: 'amber',
+  triaged:  'green',
+  resolved: 'emerald',
+  ignored:  'gray',
 }
 
 function toTitleCase(str) {
@@ -13,10 +15,22 @@ function toTitleCase(str) {
 }
 
 export default function StatusBadge({ status }) {
-  const classes = STATUS_CLASSES[status] || 'bg-gray-100 text-gray-500'
+  const tone = STATUS_TONE[status] || 'gray'
   const label = status ? toTitleCase(status) : 'Unknown'
   return (
-    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${classes}`}>
+    <span
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        padding: '2px 10px',
+        borderRadius: 9999,
+        fontSize: 12,
+        fontWeight: 600,
+        whiteSpace: 'nowrap',
+        backgroundColor: `var(--badge-${tone}-bg)`,
+        color: `var(--badge-${tone}-fg)`,
+      }}
+    >
       {label}
     </span>
   )

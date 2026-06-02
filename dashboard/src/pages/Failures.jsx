@@ -15,17 +15,48 @@ const CATEGORIES = [
   'dependency_failure',
 ]
 
+const selectStyle = {
+  border: '1px solid var(--border)',
+  borderRadius: 6,
+  padding: '6px 12px',
+  fontSize: 13,
+  color: 'var(--text-primary)',
+  background: 'var(--bg-surface)',
+  outline: 'none',
+  cursor: 'pointer',
+}
+
 function Spinner() {
   return (
-    <div className="flex justify-center items-center py-20">
-      <div className="w-10 h-10 rounded-full border-4 border-gray-200 border-t-indigo-600 animate-spin" />
+    <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '80px 0' }}>
+      <style>{`@keyframes fail-spin { to { transform: rotate(360deg); } }`}</style>
+      <div
+        style={{
+          width: 40,
+          height: 40,
+          borderRadius: '50%',
+          border: '4px solid var(--bg-elevated)',
+          borderTopColor: 'var(--accent)',
+          animation: 'fail-spin 0.8s linear infinite',
+        }}
+      />
     </div>
   )
 }
 
 function ErrorBanner({ message }) {
   return (
-    <div className="bg-red-50 border border-red-200 text-red-700 p-4 rounded mb-4">
+    <div
+      style={{
+        background: 'var(--danger-bg)',
+        border: '1px solid var(--danger)',
+        color: 'var(--danger-fg)',
+        padding: '12px 16px',
+        borderRadius: 8,
+        marginBottom: 16,
+        fontSize: 14,
+      }}
+    >
       <strong>Error:</strong> {message}
     </div>
   )
@@ -80,17 +111,43 @@ export default function Failures() {
       )
     : items
 
+  const thStyle = {
+    textAlign: 'left',
+    padding: '12px 16px',
+    fontSize: 12,
+    fontWeight: 600,
+    color: 'var(--text-muted)',
+    textTransform: 'uppercase',
+    letterSpacing: '0.05em',
+    borderBottom: '1px solid var(--border)',
+  }
+
+  const tdStyle = {
+    padding: '12px 16px',
+    color: 'var(--text-muted)',
+  }
+
+  const pageBtnStyle = (disabled) => ({
+    padding: '6px 12px',
+    fontSize: 13,
+    fontWeight: 500,
+    borderRadius: 6,
+    border: '1px solid var(--border)',
+    background: 'var(--bg-surface)',
+    color: 'var(--text-primary)',
+    cursor: disabled ? 'not-allowed' : 'pointer',
+    opacity: disabled ? 0.4 : 1,
+  })
+
   return (
     <div>
-      <h1 className="text-2xl font-bold text-gray-900 mb-6">Test Failures</h1>
+      <h1 style={{ margin: '0 0 24px', fontSize: 22, fontWeight: 700, color: 'var(--text-primary)' }}>
+        Test Failures
+      </h1>
 
       {/* Filter bar */}
-      <div className="flex flex-wrap gap-3 mb-4">
-        <select
-          value={status}
-          onChange={(e) => setStatus(e.target.value)}
-          className="border border-gray-300 rounded-md px-3 py-1.5 text-sm text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
-        >
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, marginBottom: 16 }}>
+        <select value={status} onChange={(e) => setStatus(e.target.value)} style={selectStyle}>
           <option value="">All Statuses</option>
           {STATUSES.map((s) => (
             <option key={s} value={s}>
@@ -99,11 +156,7 @@ export default function Failures() {
           ))}
         </select>
 
-        <select
-          value={category}
-          onChange={(e) => setCategory(e.target.value)}
-          className="border border-gray-300 rounded-md px-3 py-1.5 text-sm text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
-        >
+        <select value={category} onChange={(e) => setCategory(e.target.value)} style={selectStyle}>
           <option value="">All Categories</option>
           {CATEGORIES.map((c) => (
             <option key={c} value={c}>
@@ -117,7 +170,7 @@ export default function Failures() {
           placeholder="Search test name..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="border border-gray-300 rounded-md px-3 py-1.5 text-sm text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 flex-1 min-w-48"
+          style={{ ...selectStyle, flex: 1, minWidth: 192, cursor: 'text' }}
         />
       </div>
 
@@ -126,22 +179,29 @@ export default function Failures() {
       {loading ? (
         <Spinner />
       ) : (
-        <div className="bg-white rounded-lg shadow-sm overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="min-w-full text-sm">
-              <thead className="bg-gray-50 border-b border-gray-200">
+        <div
+          style={{
+            background: 'var(--bg-surface)',
+            border: '1px solid var(--border)',
+            borderRadius: 8,
+            overflow: 'hidden',
+          }}
+        >
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+              <thead>
                 <tr>
-                  <th className="text-left px-4 py-3 font-medium text-gray-500">Test Name</th>
-                  <th className="text-left px-4 py-3 font-medium text-gray-500">Category</th>
-                  <th className="text-left px-4 py-3 font-medium text-gray-500">Status</th>
-                  <th className="text-left px-4 py-3 font-medium text-gray-500">Branch</th>
-                  <th className="text-left px-4 py-3 font-medium text-gray-500">Created</th>
+                  <th style={thStyle}>Test Name</th>
+                  <th style={thStyle}>Category</th>
+                  <th style={thStyle}>Status</th>
+                  <th style={thStyle}>Branch</th>
+                  <th style={thStyle}>Created</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100">
+              <tbody>
                 {filtered.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="px-4 py-8 text-center text-gray-400">
+                    <td colSpan={5} style={{ ...tdStyle, textAlign: 'center', padding: '32px 16px' }}>
                       No failures found.
                     </td>
                   </tr>
@@ -150,28 +210,36 @@ export default function Failures() {
                     const name = f.test_name || ''
                     const truncated = name.length > 50 ? name.slice(0, 50) + '…' : name
                     return (
-                      <tr key={f.id} className="hover:bg-gray-50">
-                        <td className="px-4 py-3">
+                      <tr
+                        key={f.id}
+                        style={{ borderTop: '1px solid var(--border)' }}
+                        onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg-elevated)' }}
+                        onMouseLeave={(e) => { e.currentTarget.style.background = '' }}
+                      >
+                        <td style={tdStyle}>
                           <Link
                             to={`/failures/${f.id}`}
-                            className="text-indigo-600 hover:text-indigo-800 font-mono text-xs"
                             title={name}
+                            style={{
+                              color: 'var(--accent-light)',
+                              fontFamily: 'var(--font-mono)',
+                              fontSize: 12,
+                              textDecoration: 'none',
+                            }}
                           >
                             {truncated}
                           </Link>
                         </td>
-                        <td className="px-4 py-3">
+                        <td style={tdStyle}>
                           <CategoryBadge category={f.category} />
                         </td>
-                        <td className="px-4 py-3">
+                        <td style={tdStyle}>
                           <StatusBadge status={f.status} />
                         </td>
-                        <td className="px-4 py-3 text-gray-500 font-mono text-xs">
-                          {f.branch || <span className="text-gray-300">—</span>}
+                        <td style={{ ...tdStyle, fontFamily: 'var(--font-mono)', fontSize: 12 }}>
+                          {f.branch || <span style={{ color: 'var(--bg-elevated)' }}>—</span>}
                         </td>
-                        <td className="px-4 py-3 text-gray-500">
-                          {formatDate(f.created_at)}
-                        </td>
+                        <td style={tdStyle}>{formatDate(f.created_at)}</td>
                       </tr>
                     )
                   })
@@ -181,21 +249,29 @@ export default function Failures() {
           </div>
 
           {/* Pagination */}
-          <div className="flex items-center justify-between px-4 py-3 border-t border-gray-200 bg-gray-50">
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              padding: '12px 16px',
+              borderTop: '1px solid var(--border)',
+            }}
+          >
             <button
               onClick={() => setPage((p) => Math.max(1, p - 1))}
               disabled={page <= 1}
-              className="px-3 py-1.5 text-sm font-medium rounded border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+              style={pageBtnStyle(page <= 1)}
             >
               Previous
             </button>
-            <span className="text-sm text-gray-600">
+            <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>
               Page {page} of {totalPages}
             </span>
             <button
               onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
               disabled={page >= totalPages}
-              className="px-3 py-1.5 text-sm font-medium rounded border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+              style={pageBtnStyle(page >= totalPages)}
             >
               Next
             </button>

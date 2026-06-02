@@ -115,8 +115,15 @@ export default function Releases() {
   useEffect(() => {
     setLoading(true)
     setError(null)
-    api.get('/api/v1/releases/scores', { params: { limit: 20 } })
-      .then(res => setScores(res.data))
+    // Derive a repository from the failures list, then fetch its release scores.
+    // The /releases/recent endpoint requires a ?repository= param.
+    api.get('/api/v1/failures', { params: { limit: 1 } })
+      .then(res => {
+        const repo = res.data?.items?.[0]?.repository || null
+        if (!repo) return Promise.resolve({ data: [] })
+        return api.get('/api/v1/releases/recent', { params: { repository: repo, limit: 20 } })
+      })
+      .then(res => setScores(Array.isArray(res.data) ? res.data : []))
       .catch(err => setError(err?.response?.data?.detail || err.message || 'Failed to load release scores'))
       .finally(() => setLoading(false))
   }, [])
@@ -151,6 +158,7 @@ export default function Releases() {
     padding: '10px 12px',
     fontSize: 13,
     color: 'var(--text-primary)',
+    background: 'var(--bg-surface)',
     borderBottom: '1px solid var(--border)',
     verticalAlign: 'middle',
   }
@@ -204,9 +212,9 @@ export default function Releases() {
             </p>
           ) : (
             <div style={{ overflowX: 'auto' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                <thead>
-                  <tr>
+              <table style={{ width: '100%', borderCollapse: 'collapse', background: 'var(--bg-surface)' }}>
+                <thead style={{ background: 'var(--bg-surface)' }}>
+                  <tr style={{ background: 'var(--bg-surface)' }}>
                     <th style={thStyle}>Commit SHA</th>
                     <th style={thStyle}>Repo</th>
                     <th style={thStyle}>Branch</th>
@@ -215,7 +223,7 @@ export default function Releases() {
                     <th style={thStyle}>Date</th>
                   </tr>
                 </thead>
-                <tbody>
+                <tbody style={{ background: 'var(--bg-surface)' }}>
                   {scores.map((row, idx) => {
                     const id = row.id ?? row.commit_sha ?? idx
                     const isExpanded = expandedId === id
@@ -228,9 +236,9 @@ export default function Releases() {
                       <React.Fragment key={id}>
                         <tr
                           onClick={() => toggleRow(id)}
-                          style={{ cursor: 'pointer', transition: 'background 150ms', background: isExpanded ? 'var(--bg-elevated)' : '' }}
+                          style={{ cursor: 'pointer', transition: 'background 150ms', background: isExpanded ? 'var(--bg-elevated)' : 'var(--bg-surface)' }}
                           onMouseEnter={e => { if (!isExpanded) e.currentTarget.style.background = 'var(--bg-elevated)' }}
-                          onMouseLeave={e => { if (!isExpanded) e.currentTarget.style.background = '' }}
+                          onMouseLeave={e => { if (!isExpanded) e.currentTarget.style.background = 'var(--bg-surface)' }}
                         >
                           <td style={{ ...tdStyle, fontFamily: 'monospace', fontSize: 12 }}>
                             <span title={sha} style={{ color: 'var(--accent-light)' }}>{shaShort}</span>
@@ -253,7 +261,7 @@ export default function Releases() {
                         </tr>
                         {isExpanded && (
                           <tr style={{ background: 'var(--bg-elevated)' }}>
-                            <td colSpan={6} style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)' }}>
+                            <td colSpan={6} style={{ padding: '16px 20px', background: 'var(--bg-elevated)', borderBottom: '1px solid var(--border)' }}>
                               <p style={{ margin: '0 0 10px', fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
                                 Category Breakdown
                               </p>

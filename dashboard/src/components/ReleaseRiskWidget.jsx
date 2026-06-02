@@ -1,32 +1,34 @@
 import React from 'react'
 
+// Risk levels map to theme-aware badge tones (defined in index.css). The score
+// bar keeps a solid semantic color, which reads well on both light and dark.
 const RISK_STYLES = {
-  critical: { bg: '#fee2e2', text: '#991b1b', bar: '#ef4444' },
-  high:     { bg: '#ffedd5', text: '#9a3412', bar: '#f97316' },
-  medium:   { bg: '#fef9c3', text: '#854d0e', bar: '#eab308' },
-  low:      { bg: '#dcfce7', text: '#166534', bar: '#22c55e' },
+  critical: { tone: 'red',    bar: '#ef4444' },
+  high:     { tone: 'orange', bar: '#f97316' },
+  medium:   { tone: 'yellow', bar: '#eab308' },
+  low:      { tone: 'green',  bar: '#22c55e' },
 }
 
 export default function ReleaseRiskWidget({ scores = [] }) {
   const cardStyle = {
-    backgroundColor: '#ffffff',
-    borderRadius: '0.5rem',
-    boxShadow: '0 1px 3px 0 rgba(0,0,0,0.1), 0 1px 2px 0 rgba(0,0,0,0.06)',
-    padding: '1.5rem',
+    background: 'var(--bg-surface)',
+    border: '1px solid var(--border)',
+    borderRadius: 8,
+    padding: 24,
   }
 
   const headerStyle = {
-    fontSize: '0.875rem',
+    margin: '0 0 16px',
+    fontSize: 14,
     fontWeight: 600,
-    color: '#374151',
-    marginBottom: '1rem',
+    color: 'var(--text-primary)',
   }
 
   if (scores.length === 0) {
     return (
       <div style={cardStyle}>
         <h2 style={headerStyle}>Release Risk</h2>
-        <p style={{ color: '#9ca3af', fontSize: '0.875rem' }}>No releases scored yet</p>
+        <p style={{ color: 'var(--text-muted)', fontSize: 13, margin: 0 }}>No releases scored yet</p>
       </div>
     )
   }
@@ -55,9 +57,9 @@ export default function ReleaseRiskWidget({ scores = [] }) {
               {/* Commit SHA */}
               <span
                 style={{
-                  fontFamily: 'monospace',
+                  fontFamily: 'var(--font-mono)',
                   fontSize: '0.75rem',
-                  color: '#374151',
+                  color: 'var(--text-primary)',
                   minWidth: '4rem',
                 }}
               >
@@ -75,8 +77,8 @@ export default function ReleaseRiskWidget({ scores = [] }) {
                   fontWeight: 600,
                   textTransform: 'uppercase',
                   letterSpacing: '0.03em',
-                  backgroundColor: style.bg,
-                  color: style.text,
+                  backgroundColor: `var(--badge-${style.tone}-bg)`,
+                  color: `var(--badge-${style.tone}-fg)`,
                   minWidth: '4.5rem',
                   justifyContent: 'center',
                 }}
@@ -100,7 +102,7 @@ export default function ReleaseRiskWidget({ scores = [] }) {
               <span
                 style={{
                   fontSize: '0.75rem',
-                  color: '#6b7280',
+                  color: 'var(--text-muted)',
                   minWidth: '1.5rem',
                 }}
               >

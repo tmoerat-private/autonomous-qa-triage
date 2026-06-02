@@ -1,7 +1,18 @@
 /* =============================================
-   Design tokens — dark theme
+   Design tokens
+   ---------------------------------------------
+   :root holds the DARK theme (the app default).
+   [data-theme="light"] overrides for light mode.
+   The active theme is set by ThemeProvider via
+   document.documentElement.dataset.theme.
+
+   Every surface/text/border/semantic token is
+   theme-aware, so components that reference these
+   variables re-theme automatically on toggle.
    ============================================= */
-:root {
+:root,
+[data-theme="dark"] {
+  /* Surfaces & text */
   --bg-base:      #0F172A;
   --bg-surface:   #1E293B;
   --bg-elevated:  #334155;
@@ -13,6 +24,65 @@
   --warning:      #F59E0B;
   --danger:       #EF4444;
   --border:       #334155;
+
+  /* Inline error banners */
+  --danger-bg:    #3F1515;
+  --danger-fg:    #FCA5A5;
+
+  /* Badge tones — translucent fill + bright text for dark surfaces */
+  --badge-red-bg:     rgba(239, 68, 68, 0.15);   --badge-red-fg:     #fca5a5;
+  --badge-yellow-bg:  rgba(234, 179, 8, 0.15);   --badge-yellow-fg:  #fde047;
+  --badge-amber-bg:   rgba(245, 158, 11, 0.15);  --badge-amber-fg:   #fcd34d;
+  --badge-orange-bg:  rgba(249, 115, 22, 0.15);  --badge-orange-fg:  #fdba74;
+  --badge-purple-bg:  rgba(168, 85, 247, 0.15);  --badge-purple-fg:  #d8b4fe;
+  --badge-blue-bg:    rgba(59, 130, 246, 0.15);  --badge-blue-fg:    #93c5fd;
+  --badge-indigo-bg:  rgba(99, 102, 241, 0.15);  --badge-indigo-fg:  #a5b4fc;
+  --badge-sky-bg:     rgba(56, 189, 248, 0.15);  --badge-sky-fg:     #7dd3fc;
+  --badge-green-bg:   rgba(34, 197, 94, 0.15);   --badge-green-fg:   #86efac;
+  --badge-emerald-bg: rgba(16, 185, 129, 0.15);  --badge-emerald-fg: #6ee7b7;
+  --badge-gray-bg:    rgba(148, 163, 184, 0.15); --badge-gray-fg:    #cbd5e1;
+
+  /* Typography */
+  --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    Helvetica, Arial, sans-serif;
+  --font-mono: "JetBrains Mono", "SF Mono", "Fira Code", ui-monospace,
+    SFMono-Regular, Menlo, Consolas, monospace;
+
+  color-scheme: dark;
+}
+
+[data-theme="light"] {
+  /* Surfaces & text */
+  --bg-base:      #F1F5F9;
+  --bg-surface:   #FFFFFF;
+  --bg-elevated:  #E2E8F0;
+  --accent:       #0D9488;
+  --accent-light: #0F766E; /* darker teal — readable on light surfaces */
+  --text-primary: #0F172A;
+  --text-muted:   #64748B;
+  --success:      #16A34A;
+  --warning:      #D97706;
+  --danger:       #DC2626;
+  --border:       #E2E8F0;
+
+  /* Inline error banners */
+  --danger-bg:    #FEF2F2;
+  --danger-fg:    #B91C1C;
+
+  /* Badge tones — pale tint + dark text for light surfaces */
+  --badge-red-bg:     #fee2e2;  --badge-red-fg:     #b91c1c;
+  --badge-yellow-bg:  #fef9c3;  --badge-yellow-fg:  #a16207;
+  --badge-amber-bg:   #fef3c7;  --badge-amber-fg:   #b45309;
+  --badge-orange-bg:  #ffedd5;  --badge-orange-fg:  #c2410c;
+  --badge-purple-bg:  #f3e8ff;  --badge-purple-fg:  #7e22ce;
+  --badge-blue-bg:    #dbeafe;  --badge-blue-fg:    #1d4ed8;
+  --badge-indigo-bg:  #e0e7ff;  --badge-indigo-fg:  #4338ca;
+  --badge-sky-bg:     #e0f2fe;  --badge-sky-fg:     #0369a1;
+  --badge-green-bg:   #dcfce7;  --badge-green-fg:   #15803d;
+  --badge-emerald-bg: #d1fae5;  --badge-emerald-fg: #047857;
+  --badge-gray-bg:    #f1f5f9;  --badge-gray-fg:    #475569;
+
+  color-scheme: light;
 }
 
 /* =============================================
@@ -22,13 +92,49 @@
   box-sizing: border-box;
 }
 
+html {
+  /* Enable contextual alternates + standard ligatures site-wide */
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+}
+
 body {
   margin: 0;
   padding: 0;
   background-color: var(--bg-base);
   color: var(--text-primary);
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  font-family: var(--font-sans);
+  font-size: 15px;
+  line-height: 1.55;
+  letter-spacing: -0.01em;
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  /* Smooth the transition when toggling themes */
+  transition: background-color 200ms ease, color 200ms ease;
+}
+
+/* Headings — tighter tracking for a modern, condensed display feel */
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-sans);
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+}
+
+/* Code / monospace elements use the mono stack and tabular figures */
+code, pre, kbd, samp {
+  font-family: var(--font-mono);
+  font-feature-settings: "liga" 0;
+}
+
+/* Numeric data (tables, metrics) aligns better with tabular figures */
+table {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Form controls inherit the modern sans stack instead of UA defaults */
+button, input, select, textarea {
+  font-family: inherit;
+  letter-spacing: inherit;
 }
 
 /* =============================================

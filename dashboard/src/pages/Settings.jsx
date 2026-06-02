@@ -51,44 +51,35 @@ const INTEGRATIONS = [
   },
 ]
 
-function StatusIcon({ connected }) {
-  return connected ? (
+function StatusPill({ connected }) {
+  const tone = connected ? 'green' : 'gray'
+  return (
     <span
       style={{
         display: 'inline-flex',
         alignItems: 'center',
-        justifyContent: 'center',
-        width: 24,
-        height: 24,
-        borderRadius: '50%',
-        background: '#0d3530',
-        color: 'var(--success)',
-        fontSize: 14,
-        fontWeight: 700,
+        gap: 6,
+        padding: '3px 10px',
+        borderRadius: 9999,
+        fontSize: 11,
+        fontWeight: 600,
+        letterSpacing: '0.02em',
+        backgroundColor: `var(--badge-${tone}-bg)`,
+        color: `var(--badge-${tone}-fg)`,
         flexShrink: 0,
       }}
-      title="Connected"
+      title={connected ? 'Connected' : 'Not connected'}
     >
-      ✓
-    </span>
-  ) : (
-    <span
-      style={{
-        display: 'inline-flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        width: 24,
-        height: 24,
-        borderRadius: '50%',
-        background: '#3f1515',
-        color: 'var(--danger)',
-        fontSize: 14,
-        fontWeight: 700,
-        flexShrink: 0,
-      }}
-      title="Disconnected"
-    >
-      ✗
+      <span
+        style={{
+          width: 6,
+          height: 6,
+          borderRadius: '50%',
+          background: 'currentColor',
+          flexShrink: 0,
+        }}
+      />
+      {connected ? 'Connected' : 'Not connected'}
     </span>
   )
 }
@@ -115,9 +106,9 @@ function ErrorBanner({ message }) {
   return (
     <div
       style={{
-        background: '#3f1515',
+        background: 'var(--danger-bg)',
         border: '1px solid var(--danger)',
-        color: '#fca5a5',
+        color: 'var(--danger-fg)',
         padding: '12px 16px',
         borderRadius: 8,
         marginBottom: 16,
@@ -218,51 +209,90 @@ export default function Settings() {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 16 }}>
           {INTEGRATIONS.map(integration => {
             const { connected, detail } = deriveIntegrationStatus(health, integration.key)
+            const tone = connected ? 'green' : 'gray'
             return (
               <div
                 key={integration.key}
                 style={{
+                  position: 'relative',
                   background: 'var(--bg-surface)',
-                  border: `1px solid ${connected ? '#0d3530' : '#3f1515'}`,
-                  borderRadius: 10,
-                  padding: '20px 20px',
+                  border: '1px solid var(--border)',
+                  borderRadius: 12,
+                  padding: 18,
                   display: 'flex',
                   flexDirection: 'column',
-                  gap: 12,
+                  gap: 16,
+                  overflow: 'hidden',
+                  transition: 'transform 150ms ease, box-shadow 150ms ease, border-color 150ms ease',
+                  cursor: 'default',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.transform = 'translateY(-2px)'
+                  e.currentTarget.style.boxShadow = '0 8px 24px rgba(0,0,0,0.18)'
+                  e.currentTarget.style.borderColor = 'var(--accent)'
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.transform = ''
+                  e.currentTarget.style.boxShadow = ''
+                  e.currentTarget.style.borderColor = 'var(--border)'
                 }}
               >
-                {/* Header row */}
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <span style={{ color: connected ? 'var(--accent)' : 'var(--text-muted)' }}>
-                      {integration.icon}
-                    </span>
-                    <div>
-                      <p style={{ margin: 0, fontSize: 15, fontWeight: 600, color: 'var(--text-primary)' }}>
-                        {integration.label}
-                      </p>
-                      <p style={{ margin: 0, fontSize: 12, color: 'var(--text-muted)' }}>
-                        {integration.description}
-                      </p>
-                    </div>
-                  </div>
-                  <StatusIcon connected={connected} />
+                {/* Accent strip along the top edge */}
+                <div
+                  style={{
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    height: 3,
+                    background: `var(--badge-${tone}-fg)`,
+                    opacity: 0.9,
+                  }}
+                />
+
+                {/* Header row: icon chip + status pill */}
+                <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+                  <span
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      width: 44,
+                      height: 44,
+                      borderRadius: 10,
+                      background: `var(--badge-${tone}-bg)`,
+                      color: connected ? 'var(--accent)' : 'var(--text-muted)',
+                      flexShrink: 0,
+                    }}
+                  >
+                    {integration.icon}
+                  </span>
+                  <StatusPill connected={connected} />
                 </div>
 
-                {/* Divider */}
-                <div style={{ height: 1, background: 'var(--border)' }} />
+                {/* Title + description */}
+                <div>
+                  <p style={{ margin: 0, fontSize: 15, fontWeight: 600, color: 'var(--text-primary)', letterSpacing: '-0.01em' }}>
+                    {integration.label}
+                  </p>
+                  <p style={{ margin: '2px 0 0', fontSize: 12, color: 'var(--text-muted)' }}>
+                    {integration.description}
+                  </p>
+                </div>
 
-                {/* Detail */}
-                <p
+                {/* Detail footer */}
+                <div
                   style={{
-                    margin: 0,
+                    marginTop: 'auto',
+                    paddingTop: 12,
+                    borderTop: '1px solid var(--border)',
                     fontSize: 12,
-                    color: connected ? 'var(--success)' : 'var(--text-muted)',
+                    color: 'var(--text-muted)',
                     lineHeight: 1.5,
                   }}
                 >
                   {detail}
-                </p>
+                </div>
               </div>
             )
           })}
