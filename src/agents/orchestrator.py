@@ -4,6 +4,7 @@ from langgraph.graph import END, StateGraph
 from langgraph.graph.state import CompiledStateGraph
 
 from src.agents.nodes.duplicate_detector import duplicate_detector_node
+from src.agents.nodes.environment_health import environment_health_node
 from src.agents.nodes.failure_classifier import failure_classifier_node
 from src.agents.nodes.flaky_detector import flaky_detector_node
 from src.agents.nodes.heal_suggester import heal_suggester_node
@@ -43,6 +44,8 @@ def build_triage_graph() -> CompiledStateGraph:
                                                                      ↓
                                                             heal_suggester
                                                                      ↓
+                                                        environment_health
+                                                                     ↓
                                                           duplicate_detector
                                                                      ↓
                                                              flaky_detector
@@ -70,6 +73,7 @@ def build_triage_graph() -> CompiledStateGraph:
     graph.add_node("visual_analyzer", visual_analyzer_node)
     graph.add_node("root_cause", root_cause_node)
     graph.add_node("heal_suggester", heal_suggester_node)
+    graph.add_node("environment_health", environment_health_node)
     graph.add_node("duplicate_detector", duplicate_detector_node)
     graph.add_node("flaky_detector", flaky_detector_node)
     graph.add_node("rerun_trigger", rerun_trigger_node)
@@ -84,7 +88,8 @@ def build_triage_graph() -> CompiledStateGraph:
     graph.add_edge("log_analyzer", "visual_analyzer")
     graph.add_edge("visual_analyzer", "root_cause")
     graph.add_edge("root_cause", "heal_suggester")
-    graph.add_edge("heal_suggester", "duplicate_detector")
+    graph.add_edge("heal_suggester", "environment_health")
+    graph.add_edge("environment_health", "duplicate_detector")
     graph.add_edge("duplicate_detector", "flaky_detector")
     graph.add_edge("flaky_detector", "rerun_trigger")
     graph.add_conditional_edges(

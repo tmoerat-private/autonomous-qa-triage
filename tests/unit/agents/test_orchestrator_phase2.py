@@ -170,9 +170,14 @@ def test_visual_analyzer_leads_to_root_cause():
 
 
 def test_heal_suggester_leads_to_duplicate_detector():
-    """Phase 3: heal_suggester → duplicate_detector edge connects the new nodes to dedup."""
+    """Phase 3: heal_suggester → environment_health → duplicate_detector chain.
+
+    The environment_health node was inserted between heal_suggester and
+    duplicate_detector in Phase B (Task 9). Both edges must be present.
+    """
     graph = build_triage_graph()
-    assert ("heal_suggester", "duplicate_detector") in graph.builder.edges
+    assert ("heal_suggester", "environment_health") in graph.builder.edges
+    assert ("environment_health", "duplicate_detector") in graph.builder.edges
 
 
 def test_ticket_creator_leads_to_notifier():
