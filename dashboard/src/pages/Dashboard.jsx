@@ -1,4 +1,5 @@
-import React, { useEffect, useState, useCallback } from 'react'
+import React, { useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import {
   PieChart, Pie, Cell, Tooltip, Legend,
   LineChart, Line, XAxis, YAxis, CartesianGrid, ResponsiveContainer,
@@ -15,22 +16,6 @@ const CATEGORY_COLORS = {
   infra_issue: '#3b82f6',
   config_error: '#6366f1',
   dependency_failure: '#6b7280',
-}
-
-function Spinner() {
-  return (
-    <div className="flex justify-center items-center py-20">
-      <div className="w-10 h-10 rounded-full border-4 border-gray-200 border-t-indigo-600 animate-spin" />
-    </div>
-  )
-}
-
-function ErrorBanner({ message }) {
-  return (
-    <div className="bg-red-50 border border-red-200 text-red-700 p-4 rounded mb-4">
-      <strong>Error:</strong> {message}
-    </div>
-  )
 }
 
 function pct(value, total) {
@@ -52,41 +37,96 @@ function relativeDate(isoString) {
   return `${diffDays} day${diffDays === 1 ? '' : 's'} ago`
 }
 
+// Loading skeleton placeholder card
+function SkeletonCard() {
+  return (
+    <div
+      style={{
+        background: 'var(--bg-elevated)',
+        borderRadius: 8,
+        padding: 24,
+        height: 96,
+        animation: 'sk-pulse 1.5s ease-in-out infinite',
+      }}
+    />
+  )
+}
+
+// Loading skeleton placeholder for charts
+function SkeletonBlock({ height = 300 }) {
+  return (
+    <div
+      style={{
+        background: 'var(--bg-elevated)',
+        borderRadius: 8,
+        height,
+        animation: 'sk-pulse 1.5s ease-in-out infinite',
+      }}
+    />
+  )
+}
+
+function ErrorCard({ message }) {
+  return (
+    <div
+      style={{
+        background: '#3f1515',
+        border: '1px solid var(--danger)',
+        color: '#fca5a5',
+        padding: '12px 16px',
+        borderRadius: 8,
+        marginBottom: 16,
+        fontSize: 14,
+      }}
+    >
+      <strong>Error:</strong> {message}
+    </div>
+  )
+}
+
+const PERIODS = ['24h', '7d', '30d']
+
 export default function Dashboard() {
   const [period, setPeriod] = useState('7d')
-  const [summary, setSummary] = useState(null)
-  const [trends, setTrends] = useState([])
-  const [topFailing, setTopFailing] = useState([])
-  const [releaseScores, setReleaseScores] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(null)
 
-  const fetchData = useCallback(async () => {
-    setLoading(true)
-    setError(null)
-    try {
-      const [s, tr, tf] = await Promise.all([
-        getSummary(period),
-        getTrends(30),
-        getTopFailing(7),
-      ])
-      setSummary(s)
-      setTrends(tr)
-      setTopFailing(tf)
-      // Fetch release scores non-fatally (won't exist until real triage runs)
-      getRecentReleaseScores('org/api-service', 5)
-        .then(setReleaseScores)
-        .catch(() => {})
-    } catch (err) {
-      setError(err?.response?.data?.detail || err.message || 'Failed to load dashboard data')
-    } finally {
-      setLoading(false)
-    }
-  }, [period])
+  const {
+    data: summary,
+    isLoading: summaryLoading,
+    error: summaryError,
+  } = useQuery({
+    queryKey: ['summary', period],
+    queryFn: () => getSummary(period),
+  })
 
-  useEffect(() => {
-    fetchData()
-  }, [fetchData])
+  const {
+    data: trends = [],
+    isLoading: trendsLoading,
+    error: trendsError,
+  } = useQuery({
+    queryKey: ['trends'],
+    queryFn: () => getTrends(30),
+  })
+
+  const {
+    data: topFailing = [],
+    isLoading: topFailingLoading,
+  } = useQuery({
+    queryKey: ['topFailing'],
+    queryFn: () => getTopFailing(7),
+  })
+
+  const { data: releaseScores = [] } = useQuery({
+    queryKey: ['releaseScores'],
+    queryFn: () => getRecentReleaseScores('org/api-service', 5),
+    // Non-fatal — silently returns [] on error
+    throwOnError: false,
+    retry: false,
+  })
+
+  const mainLoading = summaryLoading || trendsLoading || topFailingLoading
+  const mainError =
+    (summaryError?.response?.data?.detail || summaryError?.message) ||
+    (trendsError?.response?.data?.detail || trendsError?.message)
 
   // Build pie chart data from summary.by_category
   const pieData = summary
@@ -96,28 +136,41 @@ export default function Dashboard() {
     : []
 
   // Format trend dates as MM-DD
-  // API returns {date, count} — a single total per day
   const trendData = trends.map((row) => ({
     ...row,
     label: row.date ? row.date.slice(-5) : '',
   }))
 
-  const PERIODS = ['24h', '7d', '30d']
-
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
-        <div className="flex gap-1">
+      {/* Keyframe for skeleton pulse */}
+      <style>{`
+        @keyframes sk-pulse {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.4; }
+        }
+      `}</style>
+
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
+        <h1 style={{ margin: 0, fontSize: 22, fontWeight: 700, color: 'var(--text-primary)' }}>
+          Dashboard
+        </h1>
+        <div style={{ display: 'flex', gap: 4 }}>
           {PERIODS.map((p) => (
             <button
               key={p}
               onClick={() => setPeriod(p)}
-              className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${
-                period === p
-                  ? 'bg-indigo-600 text-white'
-                  : 'bg-white text-gray-600 border border-gray-300 hover:bg-gray-50'
-              }`}
+              style={{
+                padding: '5px 12px',
+                borderRadius: 6,
+                fontSize: 13,
+                fontWeight: 500,
+                cursor: 'pointer',
+                transition: 'background 150ms, color 150ms',
+                border: period === p ? 'none' : '1px solid var(--border)',
+                background: period === p ? 'var(--accent)' : 'var(--bg-surface)',
+                color: period === p ? '#fff' : 'var(--text-muted)',
+              }}
             >
               {p}
             </button>
@@ -125,13 +178,42 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {error && <ErrorBanner message={error} />}
-      {loading ? (
-        <Spinner />
+      {mainError && <ErrorCard message={mainError} />}
+
+      {mainLoading ? (
+        <>
+          {/* Summary card skeletons */}
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+              gap: 16,
+              marginBottom: 24,
+            }}
+          >
+            {[0, 1, 2, 3].map((i) => <SkeletonCard key={i} />)}
+          </div>
+
+          {/* Chart skeletons */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, marginBottom: 24 }}>
+            <SkeletonBlock height={336} />
+            <SkeletonBlock height={336} />
+          </div>
+
+          {/* Table skeleton */}
+          <SkeletonBlock height={200} />
+        </>
       ) : (
         <>
           {/* Summary cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+              gap: 16,
+              marginBottom: 24,
+            }}
+          >
             <SummaryCard
               title="Total Failures"
               value={summary?.total ?? 0}
@@ -140,29 +222,45 @@ export default function Dashboard() {
               title="Product Bugs"
               value={summary?.by_category?.product_bug ?? 0}
               sub={`${pct(summary?.by_category?.product_bug ?? 0, summary?.total)} of total`}
-              color="text-red-600"
+              color="var(--danger)"
             />
             <SummaryCard
               title="Flaky Tests"
               value={summary?.flaky_count ?? 0}
               sub={`${pct(summary?.flaky_count ?? 0, summary?.total)} of total`}
-              color="text-yellow-600"
+              color="var(--warning)"
             />
             <SummaryCard
               title="Env Issues"
               value={summary?.by_category?.env_issue ?? 0}
               sub={`${pct(summary?.by_category?.env_issue ?? 0, summary?.total)} of total`}
-              color="text-orange-600"
+              color="#f97316"
             />
           </div>
 
           {/* Charts */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))',
+              gap: 24,
+              marginBottom: 24,
+            }}
+          >
             {/* Pie chart */}
-            <div className="bg-white rounded-lg shadow-sm p-6">
-              <h2 className="text-base font-semibold text-gray-700 mb-4">Failures by Category</h2>
+            <div
+              style={{
+                background: 'var(--bg-surface)',
+                border: '1px solid var(--border)',
+                borderRadius: 8,
+                padding: 24,
+              }}
+            >
+              <h2 style={{ margin: '0 0 16px', fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>
+                Failures by Category
+              </h2>
               {pieData.length === 0 ? (
-                <p className="text-gray-400 text-sm">No data for this period.</p>
+                <p style={{ color: 'var(--text-muted)', fontSize: 13 }}>No data for this period.</p>
               ) : (
                 <ResponsiveContainer width="100%" height={300}>
                   <PieChart>
@@ -186,21 +284,38 @@ export default function Dashboard() {
             </div>
 
             {/* Line chart */}
-            <div className="bg-white rounded-lg shadow-sm p-6">
-              <h2 className="text-base font-semibold text-gray-700 mb-4">Trends (Last 30 Days)</h2>
+            <div
+              style={{
+                background: 'var(--bg-surface)',
+                border: '1px solid var(--border)',
+                borderRadius: 8,
+                padding: 24,
+              }}
+            >
+              <h2 style={{ margin: '0 0 16px', fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>
+                Trends (Last 30 Days)
+              </h2>
               {trendData.length === 0 ? (
-                <p className="text-gray-400 text-sm">No trend data available.</p>
+                <p style={{ color: 'var(--text-muted)', fontSize: 13 }}>No trend data available.</p>
               ) : (
                 <ResponsiveContainer width="100%" height={300}>
                   <LineChart data={trendData} margin={{ top: 5, right: 10, left: -10, bottom: 5 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                    <XAxis dataKey="label" tick={{ fontSize: 11 }} />
-                    <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
-                    <Tooltip formatter={(v) => [v, 'Failures']} />
+                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                    <XAxis dataKey="label" tick={{ fontSize: 11, fill: 'var(--text-muted)' }} />
+                    <YAxis tick={{ fontSize: 11, fill: 'var(--text-muted)' }} allowDecimals={false} />
+                    <Tooltip
+                      contentStyle={{
+                        background: 'var(--bg-elevated)',
+                        border: '1px solid var(--border)',
+                        borderRadius: 6,
+                        color: 'var(--text-primary)',
+                      }}
+                      formatter={(v) => [v, 'Failures']}
+                    />
                     <Line
                       type="monotone"
                       dataKey="count"
-                      stroke="#6366f1"
+                      stroke="var(--accent)"
                       dot={false}
                       name="Total Failures"
                     />
@@ -211,18 +326,44 @@ export default function Dashboard() {
           </div>
 
           {/* Top failing tests */}
-          <div className="bg-white rounded-lg shadow-sm p-6">
-            <h2 className="text-base font-semibold text-gray-700 mb-4">Top Failing Tests</h2>
+          <div
+            style={{
+              background: 'var(--bg-surface)',
+              border: '1px solid var(--border)',
+              borderRadius: 8,
+              padding: 24,
+              marginBottom: 24,
+            }}
+          >
+            <h2 style={{ margin: '0 0 16px', fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>
+              Top Failing Tests
+            </h2>
             {topFailing.length === 0 ? (
-              <p className="text-gray-400 text-sm">No failing tests in this period.</p>
+              <p style={{ color: 'var(--text-muted)', fontSize: 13, margin: 0 }}>
+                No failing tests in this period.
+              </p>
             ) : (
-              <div className="overflow-x-auto">
-                <table className="min-w-full text-sm">
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
                   <thead>
-                    <tr className="border-b border-gray-200">
-                      <th className="text-left py-2 pr-4 font-medium text-gray-500 w-8">#</th>
-                      <th className="text-left py-2 pr-4 font-medium text-gray-500">Test Name</th>
-                      <th className="text-left py-2 font-medium text-gray-500">Failures (30d)</th>
+                    <tr>
+                      {['#', 'Test Name', 'Failures (30d)'].map((h) => (
+                        <th
+                          key={h}
+                          style={{
+                            textAlign: 'left',
+                            padding: '8px 12px',
+                            fontSize: 12,
+                            fontWeight: 600,
+                            color: 'var(--text-muted)',
+                            textTransform: 'uppercase',
+                            letterSpacing: '0.05em',
+                            borderBottom: '1px solid var(--border)',
+                          }}
+                        >
+                          {h}
+                        </th>
+                      ))}
                     </tr>
                   </thead>
                   <tbody>
@@ -230,15 +371,27 @@ export default function Dashboard() {
                       const name = row.test_name || ''
                       const truncated = name.length > 60 ? name.slice(0, 60) + '…' : name
                       return (
-                        <tr key={i} className="border-b border-gray-100 hover:bg-gray-50">
-                          <td className="py-2 pr-4 text-gray-400">{i + 1}</td>
+                        <tr
+                          key={i}
+                          style={{ borderBottom: '1px solid var(--border)' }}
+                          onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg-elevated)' }}
+                          onMouseLeave={(e) => { e.currentTarget.style.background = '' }}
+                        >
+                          <td style={{ padding: '8px 12px', color: 'var(--text-muted)', width: 32 }}>{i + 1}</td>
                           <td
-                            className="py-2 pr-4 text-gray-800 font-mono text-xs"
+                            style={{
+                              padding: '8px 12px',
+                              color: 'var(--text-primary)',
+                              fontFamily: 'monospace',
+                              fontSize: 12,
+                            }}
                             title={name}
                           >
                             {truncated}
                           </td>
-                          <td className="py-2 font-semibold text-gray-900">{row.count ?? '—'}</td>
+                          <td style={{ padding: '8px 12px', fontWeight: 600, color: 'var(--text-primary)' }}>
+                            {row.count ?? '—'}
+                          </td>
                         </tr>
                       )
                     })}
@@ -249,9 +402,7 @@ export default function Dashboard() {
           </div>
 
           {/* Release Risk */}
-          <div className="mt-6">
-            <ReleaseRiskWidget scores={releaseScores} />
-          </div>
+          <ReleaseRiskWidget scores={releaseScores} />
         </>
       )}
     </div>
@@ -260,10 +411,23 @@ export default function Dashboard() {
 
 function SummaryCard({ title, value, sub, color }) {
   return (
-    <div className="bg-white rounded-lg shadow-sm p-6">
-      <p className="text-sm font-medium text-gray-500">{title}</p>
-      <p className={`text-3xl font-bold mt-1 ${color || 'text-gray-900'}`}>{value}</p>
-      {sub && <p className="text-xs text-gray-400 mt-1">{sub}</p>}
+    <div
+      style={{
+        background: 'var(--bg-surface)',
+        border: '1px solid var(--border)',
+        borderRadius: 8,
+        padding: 24,
+      }}
+    >
+      <p style={{ margin: '0 0 4px', fontSize: 12, fontWeight: 500, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+        {title}
+      </p>
+      <p style={{ margin: 0, fontSize: 30, fontWeight: 700, color: color || 'var(--text-primary)' }}>
+        {value}
+      </p>
+      {sub && (
+        <p style={{ margin: '4px 0 0', fontSize: 12, color: 'var(--text-muted)' }}>{sub}</p>
+      )}
     </div>
   )
 }

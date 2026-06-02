@@ -51,6 +51,21 @@ export function getScreenshotFileUrl(screenshotId) {
   return `${base}/api/v1/failures/screenshots/${screenshotId}/file`
 }
 
+export async function getAgentRuns(limit = 50) {
+  const res = await api.get('/api/v1/agents/runs', { params: { limit } })
+  return res.data
+}
+
+export async function getAgentRunsForFailure(failureId) {
+  const res = await api.get('/api/v1/agents/runs', { params: { failure_id: failureId } })
+  return res.data
+}
+
+export async function getReleaseScores(limit = 20) {
+  const res = await api.get('/api/v1/releases/scores', { params: { limit } })
+  return res.data
+}
+
 export async function getSummary(period = '7d') {
   const res = await api.get('/api/v1/dashboard/summary', { params: { period } })
   return res.data
