@@ -5,7 +5,6 @@ import io
 import zipfile
 from unittest.mock import patch
 
-import pytest
 import respx
 from httpx import Response
 

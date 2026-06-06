@@ -3,8 +3,6 @@ from __future__ import annotations
 
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import pytest
-
 from src.agents.nodes.environment_health import EnvironmentHealthResult, environment_health_node
 from src.agents.state import initial_state
 from src.config.settings import Settings

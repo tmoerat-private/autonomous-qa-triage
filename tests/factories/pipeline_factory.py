@@ -13,7 +13,7 @@ from __future__ import annotations
 import hashlib
 import os
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import factory
 
@@ -39,4 +39,4 @@ class PipelineEventFactory(factory.Factory):
     pipeline_name = "CI"
     status = PipelineStatus.FAILURE
     raw_payload = factory.LazyFunction(lambda: {})
-    received_at = factory.LazyFunction(lambda: datetime.now(tz=timezone.utc))
+    received_at = factory.LazyFunction(lambda: datetime.now(tz=UTC))
