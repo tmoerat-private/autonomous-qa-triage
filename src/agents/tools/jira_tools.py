@@ -286,7 +286,7 @@ async def search_similar_tickets(
         f"ORDER BY created DESC"
     )
 
-    params = {
+    params: dict[str, str | int] = {
         "jql": jql,
         "maxResults": capped_limit,
         "fields": "summary,status",
