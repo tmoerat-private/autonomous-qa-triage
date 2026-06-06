@@ -29,8 +29,6 @@ htmlcov/
 .DS_Store
 Thumbs.db
 
-# uv
-uv.lock
 
 # Model cache (sentence-transformers downloads)
 .cache/
