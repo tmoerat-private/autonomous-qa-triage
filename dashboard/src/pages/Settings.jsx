@@ -1,8 +1,12 @@
 import React, { useEffect, useState } from 'react'
 import axios from 'axios'
 
+// Same-origin by default — routes through the Vite proxy / ngrok tunnel.
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000',
+  baseURL: import.meta.env.VITE_API_BASE_URL || '',
+  headers: {
+    'ngrok-skip-browser-warning': 'true',
+  },
 })
 
 const INTEGRATIONS = [
@@ -143,15 +147,22 @@ function deriveIntegrationStatus(healthData, key) {
 
 export default function Settings() {
   const [health, setHealth] = useState(null)
+  const [integrations, setIntegrations] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
   useEffect(() => {
     setLoading(true)
     setError(null)
-    api.get('/health')
-      .then(res => setHealth(res.data))
-      .catch(err => setError(err?.response?.data?.detail || err.message || 'Failed to reach health endpoint'))
+    Promise.all([
+      api.get('/health'),
+      api.get('/api/v1/integrations/status'),
+    ])
+      .then(([healthRes, intRes]) => {
+        setHealth(healthRes.data)
+        setIntegrations(intRes.data)
+      })
+      .catch(err => setError(err?.response?.data?.detail || err.message || 'Failed to reach API'))
       .finally(() => setLoading(false))
   }, [])
 
@@ -208,7 +219,7 @@ export default function Settings() {
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 16 }}>
           {INTEGRATIONS.map(integration => {
-            const { connected, detail } = deriveIntegrationStatus(health, integration.key)
+            const { connected, detail } = deriveIntegrationStatus(integrations, integration.key)
             const tone = connected ? 'green' : 'gray'
             return (
               <div

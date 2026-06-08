@@ -1,7 +1,17 @@
 import axios from 'axios'
 
+// Default to a SAME-ORIGIN (relative) base so requests go to whatever host
+// serves the dashboard (localhost:5173 in dev, the ngrok URL when tunneled).
+// Vite's dev-server proxy (see vite.config.js) forwards /api and /health to
+// the API on :8000 — so only ONE port needs to be exposed through ngrok.
+// Set VITE_API_BASE_URL only if the API is on a separate, directly-reachable origin.
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000',
+  baseURL: import.meta.env.VITE_API_BASE_URL || '',
+  headers: {
+    // Tells ngrok's edge to skip the browser-warning interstitial for API calls.
+    // Safe to include in all environments — non-ngrok servers ignore unknown headers.
+    'ngrok-skip-browser-warning': 'true',
+  },
 })
 
 export async function getFailure(id) {
@@ -46,8 +56,9 @@ export async function getScreenshots(failureId) {
 }
 
 export function getScreenshotFileUrl(screenshotId) {
-  // Returns the URL string for use as an <img> src — not an async call
-  const base = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
+  // Returns the URL string for use as an <img> src — not an async call.
+  // Same-origin by default so it routes through the Vite proxy / ngrok tunnel.
+  const base = import.meta.env.VITE_API_BASE_URL || ''
   return `${base}/api/v1/failures/screenshots/${screenshotId}/file`
 }
 

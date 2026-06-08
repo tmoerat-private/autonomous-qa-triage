@@ -28,8 +28,8 @@ services:
   qdrant:
     image: qdrant/qdrant:latest
     ports:
-      - "6500:6333"
-      - "6501:6334"
+      - "16333:6333"
+      - "16334:6334"
     volumes:
       - qdrant_data:/qdrant/storage
 
@@ -53,8 +53,8 @@ services:
     image: jaegertracing/all-in-one:latest
     ports:
       - "16686:16686"
-      - "4317:4317"
-      - "4318:4318"
+      - "14317:4317"
+      - "14318:4318"
     environment:
       COLLECTOR_OTLP_ENABLED: "true"
 
