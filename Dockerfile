@@ -12,9 +12,11 @@ WORKDIR /app
 COPY --from=builder /app/.venv /app/.venv
 COPY src/ src/
 COPY alembic.ini .
+COPY docker-entrypoint.sh .
+RUN chmod +x docker-entrypoint.sh
 ENV PATH="/app/.venv/bin:$PATH"
 USER appuser
 EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
     CMD python -c "import httpx; httpx.get('http://localhost:8000/health').raise_for_status()"
-CMD ["uvicorn", "src.api.app:create_app", "--host", "0.0.0.0", "--port", "8000", "--factory"]
+CMD ["./docker-entrypoint.sh"]

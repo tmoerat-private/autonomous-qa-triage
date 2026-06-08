@@ -1,3 +1,6 @@
+from contextlib import asynccontextmanager
+from typing import AsyncGenerator
+
 import structlog
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -13,6 +16,7 @@ from src.api.routes.releases import router as releases_router
 from src.api.routes.webhooks import router as webhook_router
 from src.config.logging_config import configure_logging
 from src.config.settings import get_settings
+from src.db.qdrant_client import QdrantManager, get_qdrant_manager
 from src.observability.metrics import mount_metrics_endpoint
 
 logger = structlog.get_logger()
@@ -28,6 +32,63 @@ def create_app() -> FastAPI:
     settings = get_settings()
     configure_logging(settings.log_level, settings.app_env)
 
+    @asynccontextmanager
+    async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
+        # --- startup ---
+        logger.info(
+            "autonomous_qa_starting",
+            env=settings.app_env,
+            port=settings.app_port,
+        )
+
+        # Primary collection: error_signatures
+        qdrant_primary: QdrantManager = get_qdrant_manager()
+        try:
+            await qdrant_primary.ensure_collection(vector_size=settings.qdrant_vector_size)
+        except Exception as exc:
+            logger.warning(
+                "qdrant_collection_init_failed",
+                collection=settings.qdrant_collection,
+                error=str(exc),
+            )
+
+        # Secondary collection: triage_outcomes
+        qdrant_outcomes: QdrantManager = QdrantManager(
+            url=settings.qdrant_url,
+            collection_name=settings.qdrant_outcomes_collection,
+        )
+        try:
+            await qdrant_outcomes.ensure_collection(vector_size=settings.qdrant_vector_size)
+        except Exception as exc:
+            logger.warning(
+                "qdrant_collection_init_failed",
+                collection=settings.qdrant_outcomes_collection,
+                error=str(exc),
+            )
+
+        yield
+
+        # --- shutdown ---
+        logger.info("autonomous_qa_stopping")
+
+        try:
+            await qdrant_primary.close()
+        except Exception as exc:
+            logger.warning(
+                "qdrant_close_failed",
+                collection=settings.qdrant_collection,
+                error=str(exc),
+            )
+
+        try:
+            await qdrant_outcomes.close()
+        except Exception as exc:
+            logger.warning(
+                "qdrant_close_failed",
+                collection=settings.qdrant_outcomes_collection,
+                error=str(exc),
+            )
+
     app = FastAPI(
         title="Autonomous QA Failure Triage",
         version="0.1.0",
@@ -35,6 +96,7 @@ def create_app() -> FastAPI:
         docs_url="/api/docs",
         redoc_url="/api/redoc",
         openapi_url="/api/openapi.json",
+        lifespan=lifespan,
     )
 
     # Middleware — added in reverse order so the last-added is the outermost
@@ -73,17 +135,5 @@ def create_app() -> FastAPI:
             status_code=503,
             content={"detail": "upstream service unavailable"},
         )
-
-    @app.on_event("startup")
-    async def startup() -> None:
-        logger.info(
-            "autonomous_qa_starting",
-            env=settings.app_env,
-            port=settings.app_port,
-        )
-
-    @app.on_event("shutdown")
-    async def shutdown() -> None:
-        logger.info("autonomous_qa_stopping")
 
     return app
