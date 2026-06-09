@@ -35,7 +35,7 @@ async def _mark_event_failed(pipeline_event_id: str) -> None:
 class _TriagePipelineTask(Task):
     """Custom Task subclass so on_failure can be defined as a real method."""
 
-    def on_failure(self, exc, task_id, args, kwargs, einfo):  # noqa: ANN001
+    def on_failure(self, exc, task_id, args, kwargs, einfo):
         """Celery callback invoked once all retries are exhausted.
 
         Marks the corresponding PipelineEvent as 'failed' so the record is not
