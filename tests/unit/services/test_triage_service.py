@@ -79,11 +79,13 @@ async def test_run_triage_returns_final_state():
 # ===========================================================================
 
 
-async def test_run_triage_logs_completion(capsys: pytest.CaptureFixture) -> None:
+async def test_run_triage_logs_completion(capfd: pytest.CaptureFixture) -> None:
     """run_triage emits a triage_service.completed log event containing pipeline_event_id.
 
     structlog is configured to write to stdout (ConsoleRenderer), not to the
-    stdlib logging handler, so capsys captures the output rather than caplog.
+    stdlib logging handler.  capfd (fd-level capture) is used instead of capsys
+    because integration tests running before this one can leave structlog writing
+    to sys.__stdout__ (bypassing the sys.stdout wrapper that capsys intercepts).
     """
     final_state = _make_final_state(
         {"failure_ids": ["cccc-3333"], "is_duplicate": False, "errors": []}
@@ -95,7 +97,7 @@ async def test_run_triage_logs_completion(capsys: pytest.CaptureFixture) -> None
     ):
         await run_triage(_PIPELINE_EVENT_ID)
 
-    out = capsys.readouterr().out
+    out = capfd.readouterr().out
     assert _PIPELINE_EVENT_ID in out
     assert "triage_service.completed" in out
     assert "cccc-3333" in out
@@ -121,7 +123,7 @@ async def test_run_triage_propagates_graph_errors():
 # ===========================================================================
 
 
-async def test_run_triage_handles_duplicate_result(capsys: pytest.CaptureFixture) -> None:
+async def test_run_triage_handles_duplicate_result(capfd: pytest.CaptureFixture) -> None:
     """run_triage logs is_duplicate=True when the graph detects a duplicate failure."""
     duplicate_state = _make_final_state(
         {
@@ -141,6 +143,6 @@ async def test_run_triage_handles_duplicate_result(capsys: pytest.CaptureFixture
     assert result["is_duplicate"] is True
     assert result["duplicate_of_id"] == "existing-failure-uuid"
 
-    out = capsys.readouterr().out
+    out = capfd.readouterr().out
     assert "triage_service.completed" in out
     assert "is_duplicate" in out
