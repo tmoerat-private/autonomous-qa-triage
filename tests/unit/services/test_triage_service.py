@@ -79,13 +79,20 @@ async def test_run_triage_returns_final_state():
 # ===========================================================================
 
 
-async def test_run_triage_logs_completion(capfd: pytest.CaptureFixture) -> None:
+async def test_run_triage_logs_completion(
+    capfd: pytest.CaptureFixture,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
     """run_triage emits a triage_service.completed log event containing pipeline_event_id.
 
-    structlog is configured to write to stdout (ConsoleRenderer), not to the
-    stdlib logging handler.  capfd (fd-level capture) is used instead of capsys
-    because integration tests running before this one can leave structlog writing
-    to sys.__stdout__ (bypassing the sys.stdout wrapper that capsys intercepts).
+    structlog may route output via ConsoleRenderer (→ stdout) in local dev or via
+    the stdlib logging bridge (→ caplog) in CI, depending on how the test session
+    is configured.  We check both to remain environment-agnostic:
+
+    * capfd captures raw file-descriptor output regardless of which Python stream
+      object is written to (works when structlog uses ConsoleRenderer).
+    * caplog captures stdlib-logger records (works when structlog uses the stdlib
+      bridge that some integration-test fixtures activate).
     """
     final_state = _make_final_state(
         {"failure_ids": ["cccc-3333"], "is_duplicate": False, "errors": []}
@@ -97,11 +104,12 @@ async def test_run_triage_logs_completion(capfd: pytest.CaptureFixture) -> None:
     ):
         await run_triage(_PIPELINE_EVENT_ID)
 
-    out = capfd.readouterr().out
-    assert _PIPELINE_EVENT_ID in out
-    assert "triage_service.completed" in out
-    assert "cccc-3333" in out
-    assert "is_duplicate" in out
+    # Combine both capture sources; at least one will contain the structlog output.
+    combined = capfd.readouterr().out + caplog.text
+    assert _PIPELINE_EVENT_ID in combined
+    assert "triage_service.completed" in combined
+    assert "cccc-3333" in combined
+    assert "is_duplicate" in combined
 
 
 # ===========================================================================
@@ -123,7 +131,10 @@ async def test_run_triage_propagates_graph_errors():
 # ===========================================================================
 
 
-async def test_run_triage_handles_duplicate_result(capfd: pytest.CaptureFixture) -> None:
+async def test_run_triage_handles_duplicate_result(
+    capfd: pytest.CaptureFixture,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
     """run_triage logs is_duplicate=True when the graph detects a duplicate failure."""
     duplicate_state = _make_final_state(
         {
@@ -143,6 +154,7 @@ async def test_run_triage_handles_duplicate_result(capfd: pytest.CaptureFixture)
     assert result["is_duplicate"] is True
     assert result["duplicate_of_id"] == "existing-failure-uuid"
 
-    out = capfd.readouterr().out
-    assert "triage_service.completed" in out
-    assert "is_duplicate" in out
+    # Check both capture sources for the same reason as test_run_triage_logs_completion.
+    combined = capfd.readouterr().out + caplog.text
+    assert "triage_service.completed" in combined
+    assert "is_duplicate" in combined
