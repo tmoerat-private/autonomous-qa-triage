@@ -4,6 +4,7 @@ from uuid import UUID
 import structlog
 from celery import Task
 
+from src.db.session import reset_engine
 from src.observability.metrics import TRIAGE_COMPLETED
 from src.services.triage_service import run_triage
 from src.workers.celery_app import celery_app
@@ -79,7 +80,14 @@ def run_triage_pipeline(self, pipeline_event_id: str) -> dict:
     log = logger.bind(pipeline_event_id=pipeline_event_id, task_id=self.request.id)
     log.info("triage_pipeline.started")
     try:
-        result = asyncio.run(run_triage(pipeline_event_id))
+        # On Windows with --pool=solo, each asyncio.run() call closes the event
+        # loop.  Resetting the engine before each run ensures the connection pool
+        # is bound to the *current* event loop, not the previous (closed) one.
+        async def _run() -> dict:
+            await reset_engine()
+            return await run_triage(pipeline_event_id)
+
+        result = asyncio.run(_run())
         log.info("triage_pipeline.completed", result=result)
         TRIAGE_COMPLETED.labels(status="success").inc()
         return result
