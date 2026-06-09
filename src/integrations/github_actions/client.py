@@ -179,11 +179,30 @@ class GitHubActionsClient(BaseCIClient):
 
         try:
             with zipfile.ZipFile(io.BytesIO(response.content)) as zf:
+                all_txt = [n for n in zf.namelist() if n.endswith(".txt")]
+
+                # Prioritise files that are most likely to contain test-failure
+                # output (pytest FAILED/ERROR lines) so they appear early in the
+                # concatenated text and survive the MAX_LOG_LENGTH truncation.
+                # Files matching "test" or "pytest" (case-insensitive) come
+                # first; job-level summary files (e.g. "2_Test.txt") come
+                # second; everything else (set-up, infra steps) comes last.
+                def _sort_key(name: str) -> int:
+                    lower = name.lower()
+                    if "pytest" in lower or "run pytest" in lower:
+                        return 0
+                    if "test" in lower and "/" not in name:
+                        return 1  # top-level summary like "2_Test.txt"
+                    if "test" in lower:
+                        return 2
+                    return 3
+
+                ordered = sorted(all_txt, key=_sort_key)
+
                 parts: list[str] = []
-                for name in zf.namelist():
-                    if name.endswith(".txt"):
-                        with zf.open(name) as f:
-                            parts.append(f.read().decode("utf-8", errors="replace"))
+                for name in ordered:
+                    with zf.open(name) as f:
+                        parts.append(f.read().decode("utf-8", errors="replace"))
             text = "\n---\n".join(parts)
         except Exception as exc:
             logger.warning(
