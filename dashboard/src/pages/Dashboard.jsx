@@ -96,6 +96,8 @@ export default function Dashboard() {
   } = useQuery({
     queryKey: ['summary', period],
     queryFn: () => getSummary(period),
+    refetchInterval: 30_000,
+    refetchIntervalInBackground: false,
   })
 
   const {
@@ -105,6 +107,8 @@ export default function Dashboard() {
   } = useQuery({
     queryKey: ['trends'],
     queryFn: () => getTrends(30),
+    refetchInterval: 30_000,
+    refetchIntervalInBackground: false,
   })
 
   const {
@@ -113,6 +117,8 @@ export default function Dashboard() {
   } = useQuery({
     queryKey: ['topFailing'],
     queryFn: () => getTopFailing(7),
+    refetchInterval: 30_000,
+    refetchIntervalInBackground: false,
   })
 
   const { data: releaseScores = [] } = useQuery({
@@ -121,6 +127,8 @@ export default function Dashboard() {
     // Non-fatal — silently returns [] on error
     throwOnError: false,
     retry: false,
+    refetchInterval: 30_000,
+    refetchIntervalInBackground: false,
   })
 
   const mainLoading = summaryLoading || trendsLoading || topFailingLoading

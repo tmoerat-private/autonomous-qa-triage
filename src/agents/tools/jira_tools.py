@@ -4,6 +4,10 @@ Each tool wraps the JiraClient integration, handles errors gracefully, and
 returns typed dicts so agent nodes never have to parse free-text or catch
 exceptions from downstream HTTP calls.
 
+Rate limiting (HTTP 429): all Jira API calls are retried up to 4 times with
+exponential back-off (2 s → 60 s) when the server responds with 429.  Other
+HTTP errors (4xx/5xx) surface immediately without retrying.
+
 Tool list
 ---------
 - create_jira_ticket        Create a new Bug issue; returns ticket_id and url.
@@ -14,13 +18,54 @@ Tool list
 
 from __future__ import annotations
 
+import httpx
 import structlog
 from langchain_core.tools import tool
+from tenacity import (
+    retry,
+    retry_if_exception,
+    stop_after_attempt,
+    wait_exponential,
+)
 
 from src.config.settings import get_settings
 from src.integrations.jira.client import JiraClient
 
 logger = structlog.get_logger(__name__)
+
+# ---------------------------------------------------------------------------
+# Tenacity 429 retry helpers — shared across all tool functions in this module
+# ---------------------------------------------------------------------------
+
+_is_rate_limit = retry_if_exception(
+    lambda exc: isinstance(exc, httpx.HTTPStatusError)
+    and exc.response.status_code == 429
+)
+
+
+def _before_sleep_log(retry_state) -> None:  # type: ignore[type-arg]
+    """Log a structured warning before each tenacity sleep."""
+    exc = retry_state.outcome.exception()
+    url = "unknown"
+    if isinstance(exc, httpx.HTTPStatusError) and exc.request is not None:
+        url = str(exc.request.url)
+    wait_secs = getattr(getattr(retry_state, "next_action", None), "sleep", 0.0)
+    logger.warning(
+        "jira_tools.rate_limited.retrying",
+        attempt=retry_state.attempt_number,
+        url=url,
+        wait_seconds=round(wait_secs, 2),
+    )
+
+
+def _retry_on_429() -> dict:
+    """Return tenacity decorator kwargs for 429-only retry with back-off."""
+    return dict(
+        retry=_is_rate_limit,
+        wait=wait_exponential(multiplier=1, min=2, max=60),
+        stop=stop_after_attempt(4),
+        before_sleep=_before_sleep_log,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -65,14 +110,20 @@ async def create_jira_ticket(
     """
     settings = get_settings()
 
-    try:
+    @retry(**_retry_on_429())
+    async def _create() -> dict:
+        # JiraClient.create_issue re-raises HTTPStatusError on non-2xx
+        # (including 429), so tenacity can intercept rate-limit responses.
         async with JiraClient(settings) as client:
-            result = await client.create_issue(
+            return await client.create_issue(
                 summary=title,
                 description=description,
                 priority=priority,
                 labels=labels or [],
             )
+
+    try:
+        result = await _create()
     except Exception as exc:
         logger.error(
             "jira_tools.create_jira_ticket.failed",
@@ -128,7 +179,8 @@ async def link_duplicate_ticket(
         "outwardIssue": {"key": source_ticket_id},
     }
 
-    try:
+    @retry(**_retry_on_429())
+    async def _link() -> None:
         async with JiraClient(settings) as client:
             response = await client.client.post(
                 "/rest/api/3/issueLink",
@@ -136,6 +188,9 @@ async def link_duplicate_ticket(
             )
             # 201 Created on success; raise on anything else
             response.raise_for_status()
+
+    try:
+        await _link()
     except Exception as exc:
         logger.error(
             "jira_tools.link_duplicate_ticket.failed",
@@ -183,9 +238,15 @@ async def get_ticket_status(ticket_id: str) -> dict:
     """
     settings = get_settings()
 
-    try:
+    @retry(**_retry_on_429())
+    async def _fetch_issue() -> dict:
+        # JiraClient.get_issue calls raise_for_status() without catching, so
+        # HTTPStatusError (including 429) propagates for tenacity to intercept.
         async with JiraClient(settings) as client:
-            issue = await client.get_issue(ticket_id)
+            return await client.get_issue(ticket_id)
+
+    try:
+        issue = await _fetch_issue()
     except Exception as exc:
         logger.error(
             "jira_tools.get_ticket_status.failed",
@@ -292,14 +353,18 @@ async def search_similar_tickets(
         "fields": "summary,status",
     }
 
-    try:
+    @retry(**_retry_on_429())
+    async def _search() -> dict:
         async with JiraClient(settings) as client:
             response = await client.client.get(
                 "/rest/api/3/search",
                 params=params,
             )
             response.raise_for_status()
-            data = response.json()
+            return response.json()
+
+    try:
+        data = await _search()
     except Exception as exc:
         logger.error(
             "jira_tools.search_similar_tickets.failed",

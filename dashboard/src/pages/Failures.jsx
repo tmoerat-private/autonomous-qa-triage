@@ -96,6 +96,14 @@ export default function Failures() {
     fetchData()
   }, [fetchData])
 
+  // Auto-refresh every 30 s; pause when the tab is hidden
+  useEffect(() => {
+    const id = setInterval(() => {
+      if (!document.hidden) fetchData()
+    }, 30_000)
+    return () => clearInterval(id)
+  }, [fetchData])
+
   // Reset to page 1 when filters change
   useEffect(() => {
     setPage(1)

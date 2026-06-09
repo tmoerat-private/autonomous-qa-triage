@@ -8,12 +8,24 @@ All tools instantiate ``GitHubActionsClient`` from project settings and rely
 on it as an async context manager.  HTTP errors are caught and returned as
 descriptive strings rather than raised, so a single failed GitHub call never
 crashes the enclosing agent graph.
+
+Rate limiting (HTTP 429): direct-httpx calls and calls that propagate
+``httpx.HTTPStatusError`` from the client layer are retried up to 4 times
+with exponential back-off (2 s → 60 s).  Other HTTP errors surface
+immediately.
 """
 
 from __future__ import annotations
 
+import httpx
 import structlog
 from langchain_core.tools import tool
+from tenacity import (
+    retry,
+    retry_if_exception,
+    stop_after_attempt,
+    wait_exponential,
+)
 
 from src.config.settings import get_settings
 from src.integrations.github_actions.client import GitHubActionsClient
@@ -24,6 +36,40 @@ logger = structlog.get_logger(__name__)
 # so that Claude's context window is not saturated by a single tool result.
 _TOOL_LOG_LIMIT = 8_000
 _TOOL_DIFF_LIMIT = 4_000
+
+# ---------------------------------------------------------------------------
+# Tenacity 429 retry helpers — shared across all tool functions in this module
+# ---------------------------------------------------------------------------
+
+_is_rate_limit = retry_if_exception(
+    lambda exc: isinstance(exc, httpx.HTTPStatusError)
+    and exc.response.status_code == 429
+)
+
+
+def _before_sleep_log(retry_state) -> None:  # type: ignore[type-arg]
+    """Log a structured warning before each tenacity sleep."""
+    exc = retry_state.outcome.exception()
+    url = "unknown"
+    if isinstance(exc, httpx.HTTPStatusError) and exc.request is not None:
+        url = str(exc.request.url)
+    wait_secs = getattr(getattr(retry_state, "next_action", None), "sleep", 0.0)
+    logger.warning(
+        "github_tools.rate_limited.retrying",
+        attempt=retry_state.attempt_number,
+        url=url,
+        wait_seconds=round(wait_secs, 2),
+    )
+
+
+def _retry_on_429() -> dict:
+    """Return tenacity decorator kwargs for 429-only retry with back-off."""
+    return dict(
+        retry=_is_rate_limit,
+        wait=wait_exponential(multiplier=1, min=2, max=60),
+        stop=stop_after_attempt(4),
+        before_sleep=_before_sleep_log,
+    )
 
 
 @tool
@@ -55,6 +101,10 @@ async def get_workflow_run_logs(run_id: int, repository: str) -> str:
         repository=repository,
     )
 
+    # Note: GitHubActionsClient.get_build_logs catches HTTPStatusError
+    # internally (including 429) and returns "" rather than re-raising, so
+    # tenacity retry cannot be applied at this layer without modifying the
+    # client.  The client's own retry handles transient transport errors.
     try:
         async with GitHubActionsClient(settings) as client:
             logs = await client.get_build_logs(repository, run_id)
@@ -113,9 +163,15 @@ async def get_failed_jobs(run_id: int, repository: str) -> list[dict]:
         repository=repository,
     )
 
-    try:
+    @retry(**_retry_on_429())
+    async def _fetch_jobs() -> list[dict]:
+        # get_run_jobs re-raises HTTPStatusError on non-2xx (including 429),
+        # so tenacity can intercept and retry rate-limit responses.
         async with GitHubActionsClient(settings) as client:
-            all_jobs = await client.get_run_jobs(repository, run_id)
+            return await client.get_run_jobs(repository, run_id)
+
+    try:
+        all_jobs = await _fetch_jobs()
     except Exception as exc:
         error_msg = f"Failed to fetch jobs for run {run_id} in {repository}: {exc}"
         logger.warning("github_tools.get_failed_jobs.error", error=str(exc))
@@ -186,17 +242,20 @@ async def get_commit_diff(commit_sha: str, repository: str) -> str:
         "X-GitHub-Api-Version": "2022-11-28",
     }
 
-    # Use a dedicated client for calls not covered by GitHubActionsClient methods.
-    # GitHubActionsClient wraps workflow-run/job endpoints; commit diff uses a
-    # different Accept header so we talk to the API directly.
-    import httpx  # local import keeps module-level imports clean
-
-    try:
+    @retry(**_retry_on_429())
+    async def _fetch() -> httpx.Response:
+        # Use a dedicated client for calls not covered by GitHubActionsClient
+        # methods.  GitHubActionsClient wraps workflow-run/job endpoints; commit
+        # diff uses a different Accept header so we talk to the API directly.
         async with httpx.AsyncClient(
             timeout=30.0, headers=headers, follow_redirects=True
         ) as http:
-            response = await http.get(url)
-            response.raise_for_status()
+            resp = await http.get(url)
+            resp.raise_for_status()
+            return resp
+
+    try:
+        response = await _fetch()
     except httpx.HTTPStatusError as exc:
         error_msg = (
             f"GitHub API error {exc.response.status_code} fetching diff for "
@@ -293,14 +352,17 @@ async def get_recent_runs_for_test(
     }
     params = {"per_page": per_page}
 
-    import httpx  # local import keeps module-level imports clean
-
-    try:
+    @retry(**_retry_on_429())
+    async def _fetch() -> httpx.Response:
         async with httpx.AsyncClient(
             timeout=30.0, headers=headers, follow_redirects=True
         ) as http:
-            response = await http.get(url, params=params)
-            response.raise_for_status()
+            resp = await http.get(url, params=params)
+            resp.raise_for_status()
+            return resp
+
+    try:
+        response = await _fetch()
     except httpx.HTTPStatusError as exc:
         error_msg = (
             f"GitHub API error {exc.response.status_code} fetching runs for "
