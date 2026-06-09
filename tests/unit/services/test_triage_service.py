@@ -6,8 +6,8 @@ Covers:
   - run_triage propagates exceptions raised by triage_graph.ainvoke
   - run_triage handles is_duplicate=True result and logs it correctly
 
-triage_graph.ainvoke is patched with AsyncMock for all tests — no real LangGraph
-execution or database access occurs.
+triage_graph.ainvoke and _update_pipeline_status are patched for all tests —
+no real LangGraph execution or database access occurs.
 """
 from __future__ import annotations
 
@@ -17,6 +17,14 @@ import pytest
 
 from src.agents.state import initial_state
 from src.services.triage_service import run_triage
+
+# Patch _update_pipeline_status across all tests so no DB connection is attempted.
+# The function is tested separately; unit tests here focus solely on the graph
+# invocation, return value, and log output.
+_PATCH_DB_UPDATE = patch(
+    "src.services.triage_service._update_pipeline_status",
+    new=AsyncMock(return_value=None),
+)
 
 # ---------------------------------------------------------------------------
 # Shared test data
@@ -53,7 +61,7 @@ async def test_run_triage_returns_final_state():
     """run_triage returns the full final TriageState dict from triage_graph.ainvoke."""
     expected = _make_final_state()
 
-    with patch(
+    with _PATCH_DB_UPDATE, patch(
         "src.services.triage_service.triage_graph",
         ainvoke=AsyncMock(return_value=expected),
     ):
@@ -81,7 +89,7 @@ async def test_run_triage_logs_completion(capsys: pytest.CaptureFixture) -> None
         {"failure_ids": ["cccc-3333"], "is_duplicate": False, "errors": []}
     )
 
-    with patch(
+    with _PATCH_DB_UPDATE, patch(
         "src.services.triage_service.triage_graph",
         ainvoke=AsyncMock(return_value=final_state),
     ):
@@ -101,7 +109,7 @@ async def test_run_triage_logs_completion(capsys: pytest.CaptureFixture) -> None
 
 async def test_run_triage_propagates_graph_errors():
     """run_triage does not swallow exceptions raised by triage_graph.ainvoke."""
-    with patch(
+    with _PATCH_DB_UPDATE, patch(
         "src.services.triage_service.triage_graph",
         ainvoke=AsyncMock(side_effect=RuntimeError("graph execution failed")),
     ), pytest.raises(RuntimeError, match="graph execution failed"):
@@ -124,7 +132,7 @@ async def test_run_triage_handles_duplicate_result(capsys: pytest.CaptureFixture
         }
     )
 
-    with patch(
+    with _PATCH_DB_UPDATE, patch(
         "src.services.triage_service.triage_graph",
         ainvoke=AsyncMock(return_value=duplicate_state),
     ):
