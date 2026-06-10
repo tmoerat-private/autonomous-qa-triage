@@ -21,7 +21,12 @@ class TriageState(TypedDict):
     current_failure: dict | None
 
     # Set by failure_classifier node (Sprint 2)
-    classification: dict | None     # {category, confidence, reasoning}
+    classification: dict | None     # {category, confidence, reasoning} of the LAST failure
+    # Per-failure classifications keyed by failure_id (str UUID), so downstream
+    # nodes that loop over state['failure_ids'] can look up THIS failure's own
+    # classification rather than the shared 'classification' (last) field, which
+    # would otherwise leak the wrong failure's data in multi-failure runs.
+    classifications: dict[str, dict]
 
     # Set by log_analyzer node (Sprint 2)
     error_signature: str | None     # SHA-256 hash
@@ -91,6 +96,7 @@ def initial_state(pipeline_event_id: str) -> TriageState:
         current_failure=None,
         # failure_classifier outputs (Sprint 2)
         classification=None,
+        classifications={},
         # log_analyzer outputs (Sprint 2)
         error_signature=None,
         normalized_error_text=None,

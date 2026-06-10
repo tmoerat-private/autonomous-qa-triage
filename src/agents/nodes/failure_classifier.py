@@ -44,6 +44,9 @@ async def failure_classifier_node(state: TriageState) -> dict:
       4. Advance the failure status to 'triaging'.
 
     Returns a partial state dict with 'classification' set to the last result,
+    'classifications' mapping every successfully-classified failure_id to its
+    own result (so downstream nodes can look up each failure's own
+    classification instead of relying on the shared 'classification' field),
     or appends to 'errors' if no failure_ids are present.
     """
     log = logger.bind(
@@ -68,6 +71,7 @@ async def failure_classifier_node(state: TriageState) -> dict:
     structured_llm = llm.with_structured_output(ClassificationResult)
 
     last_result: ClassificationResult | None = None
+    classifications: dict[str, dict] = {}
     errors: list[str] = list(state["errors"])
 
     for failure_id in state["failure_ids"]:
@@ -154,6 +158,7 @@ async def failure_classifier_node(state: TriageState) -> dict:
                 await session.commit()
 
                 last_result = result
+                classifications[failure_id] = result.model_dump()
                 log.info(
                     "failure_classifier.classified",
                     failure_id=failure_id,
@@ -194,5 +199,6 @@ async def failure_classifier_node(state: TriageState) -> dict:
 
     return {
         "classification": last_result.model_dump() if last_result else None,
+        "classifications": classifications,
         "errors": errors,
     }

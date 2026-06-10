@@ -49,19 +49,26 @@ class HealSuggestionResult(BaseModel):
 async def heal_suggester_node(state: TriageState) -> dict:
     """Generate a concrete fix suggestion for each test failure in state['failure_ids'].
 
-    Skip conditions (returns immediately with heal_suggestion=None):
-      - state['root_cause'] is None: no root cause analysis was produced.
-      - classification confidence < 0.8: insufficient certainty to suggest a fix.
+    Skip conditions:
+      - state['root_cause'] is None: no root cause analysis was produced for any
+        failure — the entire node is skipped (returns immediately with
+        heal_suggestion=None).
+      - Per-failure: this failure's own classification confidence < 0.8 —
+        insufficient certainty to suggest a fix for THIS failure. Each failure
+        is evaluated against its own classification (looked up from
+        state['classifications']), not a single shared value, so one
+        low-confidence failure in a multi-failure run does not suppress
+        suggestions for higher-confidence failures.
 
-    For every failure:
+    For every (non-skipped) failure:
       1. Load TestFailure from DB.
       2. Build a structured user message combining failure data, root cause, and
-         classification context.
+         this failure's own classification context.
       3. Invoke Claude with structured output to obtain a HealSuggestionResult.
       4. Persist the suggestion to the heal_suggestions table.
 
     Returns a partial state dict with 'heal_suggestion' set to the last result's
-    model_dump(), or None if all failures failed or skipped.
+    model_dump(), or None if all failures failed or were skipped.
     """
     log = logger.bind(
         node="heal_suggester",
@@ -84,23 +91,6 @@ async def heal_suggester_node(state: TriageState) -> dict:
         )
         return {"heal_suggestion": None}
 
-    classification = state.get("classification") or {}
-    if classification.get("confidence", 0) < 0.8:
-        confidence = classification.get("confidence", 0)
-        log.info(
-            "heal_suggester.skipped",
-            reason="classification_confidence_too_low",
-            confidence=confidence,
-        )
-        await record_agent_runs(
-            session_factory,
-            state["failure_ids"],
-            agent_name="heal_suggester",
-            status=AgentRunStatus.SKIPPED,
-            output_summary=f"Skipped: classification confidence {confidence:.2f} < 0.8",
-        )
-        return {"heal_suggestion": None}
-
     if not state["failure_ids"]:
         log.warning("heal_suggester.no_failure_ids")
         return {
@@ -117,6 +107,7 @@ async def heal_suggester_node(state: TriageState) -> dict:
     structured_llm = llm.with_structured_output(HealSuggestionResult)
 
     last_result: HealSuggestionResult | None = None
+    classifications: dict[str, dict] = state.get("classifications") or {}
     errors: list[str] = list(state["errors"])
 
     for failure_id in state["failure_ids"]:
@@ -130,6 +121,31 @@ async def heal_suggester_node(state: TriageState) -> dict:
                     msg = f"heal_suggester: TestFailure not found: {failure_id}"
                     log.warning("heal_suggester.failure_not_found", failure_id=failure_id)
                     errors.append(msg)
+                    continue
+
+                # Use THIS failure's own classification, not the shared
+                # state["classification"] (which only holds the last failure's
+                # result from failure_classifier's loop).
+                classification = classifications.get(failure_id) or state.get(
+                    "classification"
+                ) or {}
+                confidence = classification.get("confidence", 0)
+                if confidence < 0.8:
+                    log.info(
+                        "heal_suggester.skipped",
+                        reason="classification_confidence_too_low",
+                        failure_id=failure_id,
+                        confidence=confidence,
+                    )
+                    await record_agent_runs(
+                        session_factory,
+                        [failure_id],
+                        agent_name="heal_suggester",
+                        status=AgentRunStatus.SKIPPED,
+                        output_summary=(
+                            f"Skipped: classification confidence {confidence:.2f} < 0.8"
+                        ),
+                    )
                     continue
 
                 agent_run_id = await start_agent_run(

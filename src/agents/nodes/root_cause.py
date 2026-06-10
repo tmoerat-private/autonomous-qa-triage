@@ -7,6 +7,7 @@ from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import HumanMessage, SystemMessage
 from pydantic import BaseModel, Field
 
+from src.agents.nodes.log_analyzer import normalize_error
 from src.agents.nodes.run_tracking import finish_agent_run, start_agent_run
 from src.agents.prompts.root_cause_prompt import ROOT_CAUSE_SYSTEM_PROMPT
 from src.agents.state import TriageState
@@ -81,6 +82,7 @@ async def root_cause_node(state: TriageState) -> dict:
     structured_llm = llm.with_structured_output(RootCauseResult)
 
     last_result: RootCauseResult | None = None
+    classifications: dict[str, dict] = state.get("classifications") or {}
     errors: list[str] = list(state["errors"])
 
     for failure_id in state["failure_ids"]:
@@ -106,11 +108,18 @@ async def root_cause_node(state: TriageState) -> dict:
                     ),
                 )
 
-                classification = state.get("classification")
+                # Prefer this failure's own classification (multi-failure runs only
+                # retain the LAST failure's result in state["classification"]).
+                classification = classifications.get(failure_id) or state.get("classification")
                 clf_category = classification["category"] if classification else "unknown"
                 clf_confidence = classification["confidence"] if classification else "N/A"
                 clf_reasoning = classification["reasoning"] if classification else "N/A"
-                norm_text = (state.get("normalized_error_text") or "N/A")[:500]
+
+                # Recompute the normalized error text for THIS failure rather than
+                # using state["normalized_error_text"], which only holds the last
+                # failure's normalized text from log_analyzer's loop.
+                error_text = (failure.error_message or "") + "\n" + (failure.stack_trace or "")
+                norm_text = normalize_error(error_text)[:500]
                 user_message = (
                     f"Test name: {failure.test_name}\n"
                     f"Error message: {failure.error_message or 'N/A'}\n"

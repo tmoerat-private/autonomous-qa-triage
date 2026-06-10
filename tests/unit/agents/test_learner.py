@@ -181,9 +181,11 @@ async def test_learner_stores_outcome_for_each_failure_id():
     assert payload["test_name"] == "test_foo"
 
 
-async def test_learner_uses_normalized_error_text_from_state():
-    """When normalized_error_text is set in state, it is passed as error_text
-    to store_outcome_embedding instead of the raw failure fields."""
+async def test_learner_normalizes_error_text_per_failure():
+    """error_text is recomputed from THIS failure's own error_message/stack_trace
+    via normalize_error(), ignoring any stale state["normalized_error_text"] —
+    which only ever holds the LAST failure's normalized text from log_analyzer's
+    loop and would leak the wrong text in multi-failure runs."""
     fake_failure = _make_fake_failure(
         test_name="test_foo",
         error_message="boom",
@@ -192,7 +194,7 @@ async def test_learner_uses_normalized_error_text_from_state():
     state = _build_state(
         failure_ids=[_FAKE_FAILURE_ID],
         classification=_VALID_CLASSIFICATION,
-        normalized_error_text="pre-normalized text",
+        normalized_error_text="some other failure's normalized text",
     )
 
     session_factory, mock_failure_repo = _make_session_factory(fake_failure)
@@ -216,7 +218,7 @@ async def test_learner_uses_normalized_error_text_from_state():
 
     assert result == {}
     call_kwargs = mock_store.call_args
-    assert call_kwargs.kwargs["error_text"] == "pre-normalized text"
+    assert call_kwargs.kwargs["error_text"] == "boom"
 
 
 async def test_learner_gracefully_handles_store_error():
@@ -247,6 +249,73 @@ async def test_learner_gracefully_handles_store_error():
         result = await learner_node(state)
 
     assert result == {}
+
+
+async def test_learner_uses_per_failure_classification_in_multi_failure_run():
+    """In a multi-failure run, state["classification"] only holds the LAST
+    failure's classification (set by failure_classifier's loop). Each failure
+    must be stored with its OWN classification from state["classifications"],
+    not the shared/last one."""
+    failure_id_a = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+    failure_id_b = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
+
+    failures_by_id = {
+        failure_id_a: _make_fake_failure(test_name="test_a", error_message="boom a"),
+        failure_id_b: _make_fake_failure(test_name="test_b", error_message="boom b"),
+    }
+
+    classification_a = {"category": "product_bug", "confidence": 0.82, "reasoning": "a"}
+    classification_b = {"category": "flaky_test", "confidence": 0.72, "reasoning": "b"}
+
+    state = _build_state(
+        failure_ids=[failure_id_a, failure_id_b],
+        # Shared "last" field holds failure B's classification — must NOT be
+        # used for failure A.
+        classification=classification_b,
+        classifications={failure_id_a: classification_a, failure_id_b: classification_b},
+    )
+
+    mock_session = AsyncMock()
+    mock_failure_repo = MagicMock()
+    mock_failure_repo.get_by_id = AsyncMock(
+        side_effect=lambda _session, fid: failures_by_id[str(fid)]
+    )
+
+    @asynccontextmanager
+    async def _ctx():
+        yield mock_session
+
+    def session_factory():
+        return _ctx()
+
+    mock_store = AsyncMock()
+
+    with (
+        patch(
+            "src.agents.nodes.learner.get_session_factory",
+            return_value=session_factory,
+        ),
+        patch(
+            "src.agents.nodes.learner.FailureRepository",
+            return_value=mock_failure_repo,
+        ),
+        patch(
+            "src.agents.nodes.learner.store_outcome_embedding",
+            mock_store,
+        ),
+    ):
+        result = await learner_node(state)
+
+    assert result == {}
+    assert mock_store.await_count == 2
+
+    payloads_by_failure_id = {
+        call.kwargs["point_id"]: call.kwargs["payload"] for call in mock_store.await_args_list
+    }
+    assert payloads_by_failure_id[failure_id_a]["category"] == "product_bug"
+    assert payloads_by_failure_id[failure_id_a]["confidence"] == 0.82
+    assert payloads_by_failure_id[failure_id_b]["category"] == "flaky_test"
+    assert payloads_by_failure_id[failure_id_b]["confidence"] == 0.72
 
 
 async def test_learner_gracefully_handles_failure_not_found():

@@ -141,12 +141,15 @@ async def test_heal_suggester_high_confidence(db_session: AsyncSession):
 
 
 async def test_heal_suggester_skip_low_confidence(db_session: AsyncSession):
-    """Node skips and returns heal_suggestion=None when classification confidence < 0.8."""
+    """Node skips a failure (no suggestion, no LLM call) when ITS OWN
+    classification confidence < 0.8, looked up via state["classifications"]."""
+    failure = await _make_failure(db_session)
     state = {
         **initial_state("some-event-id"),
-        "failure_ids": [str(uuid.uuid4())],
+        "failure_ids": [str(failure.id)],
         "root_cause": _SAMPLE_ROOT_CAUSE,
         "classification": _LOW_CONFIDENCE_CLASSIFICATION,
+        "classifications": {str(failure.id): _LOW_CONFIDENCE_CLASSIFICATION},
     }
     mock_llm_cls = _make_mock_llm()
 
@@ -161,6 +164,63 @@ async def test_heal_suggester_skip_low_confidence(db_session: AsyncSession):
 
     assert result["heal_suggestion"] is None
     mock_llm_cls.return_value.with_structured_output.return_value.ainvoke.assert_not_called()
+
+    records = await HealSuggestionRepository().get_by_failure_id(db_session, failure.id)
+    assert records == []
+
+
+async def test_heal_suggester_per_failure_confidence_in_multi_failure_run(
+    db_session: AsyncSession,
+):
+    """In a multi-failure run, state["classification"] only holds the LAST
+    failure's classification. A high-confidence failure must still get a
+    suggestion even when the LAST-processed failure was low-confidence, and
+    vice versa — each failure is gated on its OWN classification."""
+    high_conf_failure = await _make_failure(db_session)
+    low_conf_failure = await _make_failure(db_session)
+
+    state = {
+        **initial_state("some-event-id"),
+        "failure_ids": [str(high_conf_failure.id), str(low_conf_failure.id)],
+        "root_cause": _SAMPLE_ROOT_CAUSE,
+        # Shared "last" field holds the LOW-confidence failure's classification —
+        # must NOT suppress the suggestion for the high-confidence failure.
+        "classification": _LOW_CONFIDENCE_CLASSIFICATION,
+        "classifications": {
+            str(high_conf_failure.id): _HIGH_CONFIDENCE_CLASSIFICATION,
+            str(low_conf_failure.id): _LOW_CONFIDENCE_CLASSIFICATION,
+        },
+    }
+
+    mock_llm_cls = _make_mock_llm(
+        suggestion="Fix the pool size",
+        confidence=0.8,
+        affected_file="src/db/session.py",
+        fix_snippet="pool_size=20",
+    )
+    session_factory = _make_session_factory(db_session)
+
+    with (
+        patch("src.agents.nodes.heal_suggester.ChatAnthropic", mock_llm_cls),
+        patch(
+            "src.agents.nodes.heal_suggester.get_session_factory",
+            return_value=session_factory,
+        ),
+    ):
+        result = await heal_suggester_node(state)
+
+    assert result["heal_suggestion"] is not None
+    assert result["heal_suggestion"]["suggestion"] == "Fix the pool size"
+
+    high_conf_records = await HealSuggestionRepository().get_by_failure_id(
+        db_session, high_conf_failure.id
+    )
+    assert len(high_conf_records) == 1
+
+    low_conf_records = await HealSuggestionRepository().get_by_failure_id(
+        db_session, low_conf_failure.id
+    )
+    assert low_conf_records == []
 
 
 async def test_heal_suggester_skip_no_root_cause(db_session: AsyncSession):

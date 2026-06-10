@@ -16,6 +16,7 @@ from datetime import UTC, datetime
 
 import structlog
 
+from src.agents.nodes.log_analyzer import normalize_error
 from src.agents.nodes.run_tracking import (
     finish_agent_run,
     record_agent_runs,
@@ -57,6 +58,7 @@ async def learner_node(state: TriageState) -> dict:
         return {}
 
     failure_repo = FailureRepository()
+    classifications: dict[str, dict] = state.get("classifications") or {}
 
     for failure_id in state["failure_ids"]:
         agent_run_id: uuid.UUID | None = None
@@ -67,12 +69,19 @@ async def learner_node(state: TriageState) -> dict:
                     log.warning("learner.failure_not_found", failure_id=failure_id)
                     continue
 
-                # Prefer normalized text already in state (set by log_analyzer) to
-                # avoid re-computing.  Fall back to raw concatenation if absent.
-                error_text: str = (
-                    state.get("normalized_error_text")
-                    or (failure.error_message or "") + "\n" + (failure.stack_trace or "")
+                # Recompute the normalized error text for THIS failure rather than
+                # using state["normalized_error_text"], which only holds the last
+                # failure's normalized text from log_analyzer's loop (and would
+                # otherwise leak the wrong failure's text in multi-failure runs).
+                raw_error_text = (
+                    (failure.error_message or "") + "\n" + (failure.stack_trace or "")
                 )
+                error_text: str = normalize_error(raw_error_text)
+
+                # Use THIS failure's own classification, not the shared
+                # state["classification"] (which only holds the last failure's
+                # result from failure_classifier's loop).
+                failure_classification = classifications.get(failure_id) or classification
 
                 agent_run_id = await start_agent_run(
                     session_factory,
@@ -83,9 +92,9 @@ async def learner_node(state: TriageState) -> dict:
 
                 payload: dict = {
                     "test_name": failure.test_name,
-                    "category": classification["category"],
-                    "confidence": classification["confidence"],
-                    "reasoning": classification["reasoning"],
+                    "category": failure_classification["category"],
+                    "confidence": failure_classification["confidence"],
+                    "reasoning": failure_classification["reasoning"],
                     "ticket_url": state.get("ticket_url"),
                     "repository": state.get("repository"),
                     "stored_at": datetime.now(UTC).isoformat(),
@@ -99,14 +108,15 @@ async def learner_node(state: TriageState) -> dict:
                 log.info(
                     "learner.outcome_stored",
                     failure_id=failure_id,
-                    category=classification["category"],
+                    category=failure_classification["category"],
                 )
                 await finish_agent_run(
                     session_factory,
                     agent_run_id,
                     status=AgentRunStatus.COMPLETED,
                     output_summary=(
-                        f"Stored outcome embedding (category={classification['category']})"
+                        "Stored outcome embedding "
+                        f"(category={failure_classification['category']})"
                     ),
                 )
 
