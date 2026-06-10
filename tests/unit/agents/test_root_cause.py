@@ -217,6 +217,71 @@ async def test_root_cause_includes_classification_context(db_session: AsyncSessi
     assert "product_bug" in human_msg.content
 
 
+async def test_root_cause_per_failure_results_in_multi_failure_run(
+    db_session: AsyncSession,
+):
+    """In a multi-failure run, result["root_causes"] must contain a SEPARATE
+    entry per failure_id with that failure's own root cause — not just the
+    last one. The shared "last" field (result["root_cause"]) only holds the
+    LAST failure's result, but result["root_causes"][failure_id] must hold
+    EACH failure's own result."""
+    failure_a = await _make_failure(db_session)
+    failure_b = await _make_failure(db_session)
+
+    state = {
+        **initial_state(str(failure_a.pipeline_event_id)),
+        "failure_ids": [str(failure_a.id), str(failure_b.id)],
+    }
+
+    result_a = RootCauseResult(
+        root_cause_summary="DB pool exhausted under load",
+        root_cause_category="infra_flap",
+        likely_cause_files=["src/db/session.py"],
+        investigation_steps=["Check pool size"],
+    )
+    result_b = RootCauseResult(
+        root_cause_summary="Race condition in auth middleware",
+        root_cause_category="code_regression",
+        likely_cause_files=["src/auth/middleware.py"],
+        investigation_steps=["Add locking", "Reproduce with concurrent requests"],
+    )
+
+    mock_chain = MagicMock()
+    mock_chain.ainvoke = AsyncMock(side_effect=[result_a, result_b])
+    mock_llm_instance = MagicMock()
+    mock_llm_instance.with_structured_output.return_value = mock_chain
+    mock_llm_cls = MagicMock(return_value=mock_llm_instance)
+
+    session_factory = _make_session_factory(db_session)
+
+    with (
+        patch("src.agents.nodes.root_cause.ChatAnthropic", mock_llm_cls),
+        patch(
+            "src.agents.nodes.root_cause.get_session_factory",
+            return_value=session_factory,
+        ),
+    ):
+        result = await root_cause_node(state)
+
+    root_causes = result["root_causes"]
+    assert set(root_causes.keys()) == {str(failure_a.id), str(failure_b.id)}
+
+    entry_a = root_causes[str(failure_a.id)]
+    entry_b = root_causes[str(failure_b.id)]
+
+    assert entry_a["root_cause_summary"] == "DB pool exhausted under load"
+    assert entry_a["root_cause_category"] == "infra_flap"
+    assert entry_b["root_cause_summary"] == "Race condition in auth middleware"
+    assert entry_b["root_cause_category"] == "code_regression"
+
+    # The two entries must differ — neither is overwritten by the other.
+    assert entry_a["root_cause_summary"] != entry_b["root_cause_summary"]
+    assert entry_a["root_cause_category"] != entry_b["root_cause_category"]
+
+    # The shared "last" field still only holds the LAST failure's result.
+    assert result["root_cause"]["root_cause_summary"] == "Race condition in auth middleware"
+
+
 async def test_root_cause_result_structure(db_session: AsyncSession):
     """Returned root_cause dict has all four expected keys."""
     failure = await _make_failure(db_session)

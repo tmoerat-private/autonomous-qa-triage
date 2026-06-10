@@ -50,9 +50,12 @@ async def heal_suggester_node(state: TriageState) -> dict:
     """Generate a concrete fix suggestion for each test failure in state['failure_ids'].
 
     Skip conditions:
-      - state['root_cause'] is None: no root cause analysis was produced for any
-        failure — the entire node is skipped (returns immediately with
-        heal_suggestion=None).
+      - state['root_causes'] is empty/missing AND state['root_cause'] is None:
+        no root cause analysis was produced for ANY failure — the entire node
+        is skipped (returns immediately with heal_suggestion=None).
+      - Per-failure: this failure's own root cause is missing (looked up from
+        state['root_causes'], falling back to the shared state['root_cause'])
+        — that failure is skipped but others continue.
       - Per-failure: this failure's own classification confidence < 0.8 —
         insufficient certainty to suggest a fix for THIS failure. Each failure
         is evaluated against its own classification (looked up from
@@ -62,8 +65,9 @@ async def heal_suggester_node(state: TriageState) -> dict:
 
     For every (non-skipped) failure:
       1. Load TestFailure from DB.
-      2. Build a structured user message combining failure data, root cause, and
-         this failure's own classification context.
+      2. Build a structured user message combining failure data, this failure's
+         own root cause (looked up from state['root_causes']), and this
+         failure's own classification context.
       3. Invoke Claude with structured output to obtain a HealSuggestionResult.
       4. Persist the suggestion to the heal_suggestions table.
 
@@ -80,7 +84,7 @@ async def heal_suggester_node(state: TriageState) -> dict:
 
     # --- Skip conditions ---
     root_cause: dict | None = state.get("root_cause")
-    if root_cause is None:
+    if not state.get("root_causes") and root_cause is None:
         log.info("heal_suggester.skipped", reason="root_cause_missing")
         await record_agent_runs(
             session_factory,
@@ -108,6 +112,7 @@ async def heal_suggester_node(state: TriageState) -> dict:
 
     last_result: HealSuggestionResult | None = None
     classifications: dict[str, dict] = state.get("classifications") or {}
+    root_causes: dict[str, dict] = state.get("root_causes") or {}
     errors: list[str] = list(state["errors"])
 
     for failure_id in state["failure_ids"]:
@@ -121,6 +126,25 @@ async def heal_suggester_node(state: TriageState) -> dict:
                     msg = f"heal_suggester: TestFailure not found: {failure_id}"
                     log.warning("heal_suggester.failure_not_found", failure_id=failure_id)
                     errors.append(msg)
+                    continue
+
+                # Use THIS failure's own root cause, not the shared
+                # state["root_cause"] (which only holds the last failure's
+                # result from root_cause's loop).
+                failure_root_cause = root_causes.get(failure_id) or root_cause
+                if failure_root_cause is None:
+                    log.info(
+                        "heal_suggester.skipped",
+                        reason="root_cause_missing",
+                        failure_id=failure_id,
+                    )
+                    await record_agent_runs(
+                        session_factory,
+                        [failure_id],
+                        agent_name="heal_suggester",
+                        status=AgentRunStatus.SKIPPED,
+                        output_summary="Skipped: no root cause for this failure",
+                    )
                     continue
 
                 # Use THIS failure's own classification, not the shared
@@ -154,17 +178,19 @@ async def heal_suggester_node(state: TriageState) -> dict:
                     agent_name="heal_suggester",
                     input_summary=(
                         f"Test: {failure.test_name}\n"
-                        f"Root cause: {root_cause['root_cause_summary']}"
+                        f"Root cause: {failure_root_cause['root_cause_summary']}"
                     ),
                 )
 
-                likely_files = ", ".join(root_cause["likely_cause_files"]) or "unknown"
+                likely_files = (
+                    ", ".join(failure_root_cause["likely_cause_files"]) or "unknown"
+                )
                 user_message = (
                     f"Test: {failure.test_name}\n"
                     f"Error: {failure.error_message or 'N/A'}\n"
                     f"Stack trace:\n{(failure.stack_trace or '')[:2000]}\n\n"
-                    f"Root cause summary: {root_cause['root_cause_summary']}\n"
-                    f"Root cause category: {root_cause['root_cause_category']}\n"
+                    f"Root cause summary: {failure_root_cause['root_cause_summary']}\n"
+                    f"Root cause category: {failure_root_cause['root_cause_category']}\n"
                     f"Likely cause files: {likely_files}\n\n"
                     f"Classification: {classification['category']} "
                     f"(confidence: {classification['confidence']:.2f})"

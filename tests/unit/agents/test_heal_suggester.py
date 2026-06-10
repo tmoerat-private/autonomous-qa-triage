@@ -223,6 +223,157 @@ async def test_heal_suggester_per_failure_confidence_in_multi_failure_run(
     assert low_conf_records == []
 
 
+async def test_heal_suggester_per_failure_root_cause_in_multi_failure_run(
+    db_session: AsyncSession,
+):
+    """In a multi-failure run, each failure's heal suggestion must be built from
+    THAT failure's own root cause (looked up from state["root_causes"]), not
+    from the shared state["root_cause"] which only holds the LAST failure's
+    root cause analysis result."""
+    failure_a = await _make_failure(db_session)
+    failure_b = await _make_failure(db_session)
+
+    root_cause_a = {
+        "root_cause_summary": "DB pool exhausted under load",
+        "root_cause_category": "infra_flap",
+        "likely_cause_files": ["src/db/session.py"],
+        "investigation_steps": ["Check pool size"],
+    }
+    root_cause_b = {
+        "root_cause_summary": "Race condition in auth middleware",
+        "root_cause_category": "code_regression",
+        "likely_cause_files": ["src/auth/middleware.py"],
+        "investigation_steps": ["Add locking"],
+    }
+
+    state = {
+        **initial_state("some-event-id"),
+        "failure_ids": [str(failure_a.id), str(failure_b.id)],
+        # Shared "last" field holds failure B's root cause — must NOT be used
+        # for failure A.
+        "root_cause": root_cause_b,
+        "root_causes": {
+            str(failure_a.id): root_cause_a,
+            str(failure_b.id): root_cause_b,
+        },
+        "classification": _HIGH_CONFIDENCE_CLASSIFICATION,
+        "classifications": {
+            str(failure_a.id): _HIGH_CONFIDENCE_CLASSIFICATION,
+            str(failure_b.id): _HIGH_CONFIDENCE_CLASSIFICATION,
+        },
+    }
+
+    mock_chain = MagicMock()
+    mock_chain.ainvoke = AsyncMock(
+        return_value=HealSuggestionResult(
+            suggestion="Fix it",
+            confidence=0.8,
+            affected_file="src/db/session.py",
+            fix_snippet="pool_size=20",
+        )
+    )
+    mock_llm_instance = MagicMock()
+    mock_llm_instance.with_structured_output.return_value = mock_chain
+    mock_llm_cls = MagicMock(return_value=mock_llm_instance)
+
+    session_factory = _make_session_factory(db_session)
+
+    with (
+        patch("src.agents.nodes.heal_suggester.ChatAnthropic", mock_llm_cls),
+        patch(
+            "src.agents.nodes.heal_suggester.get_session_factory",
+            return_value=session_factory,
+        ),
+    ):
+        result = await heal_suggester_node(state)
+
+    assert result["heal_suggestion"] is not None
+    assert mock_chain.ainvoke.await_count == 2
+
+    user_messages = [
+        call.args[0][1].content for call in mock_chain.ainvoke.call_args_list
+    ]
+
+    # First call is for failure_a -> must reference root_cause_a, not root_cause_b.
+    assert "DB pool exhausted under load" in user_messages[0]
+    assert "infra_flap" in user_messages[0]
+    assert "Race condition in auth middleware" not in user_messages[0]
+
+    # Second call is for failure_b -> must reference root_cause_b, not root_cause_a.
+    assert "Race condition in auth middleware" in user_messages[1]
+    assert "code_regression" in user_messages[1]
+    assert "DB pool exhausted under load" not in user_messages[1]
+
+    records_a = await HealSuggestionRepository().get_by_failure_id(db_session, failure_a.id)
+    records_b = await HealSuggestionRepository().get_by_failure_id(db_session, failure_b.id)
+    assert len(records_a) == 1
+    assert len(records_b) == 1
+
+
+async def test_heal_suggester_skips_failure_missing_its_own_root_cause(
+    db_session: AsyncSession,
+):
+    """When state["root_causes"] is non-empty (so the global skip doesn't fire)
+    but a SPECIFIC failure has no entry there and there's no shared
+    state["root_cause"] fallback either, that failure is skipped (recorded as
+    SKIPPED with reason "root_cause_missing") while other failures with their
+    own root cause still get a suggestion."""
+    failure_with_rc = await _make_failure(db_session)
+    failure_without_rc = await _make_failure(db_session)
+
+    root_cause_for_a = {
+        "root_cause_summary": "DB pool exhausted under load",
+        "root_cause_category": "infra_flap",
+        "likely_cause_files": ["src/db/session.py"],
+        "investigation_steps": ["Check pool size"],
+    }
+
+    state = {
+        **initial_state("some-event-id"),
+        "failure_ids": [str(failure_with_rc.id), str(failure_without_rc.id)],
+        # No shared "last" root cause fallback.
+        "root_cause": None,
+        "root_causes": {str(failure_with_rc.id): root_cause_for_a},
+        "classification": _HIGH_CONFIDENCE_CLASSIFICATION,
+        "classifications": {
+            str(failure_with_rc.id): _HIGH_CONFIDENCE_CLASSIFICATION,
+            str(failure_without_rc.id): _HIGH_CONFIDENCE_CLASSIFICATION,
+        },
+    }
+
+    mock_llm_cls = _make_mock_llm(
+        suggestion="Fix the pool size",
+        confidence=0.8,
+        affected_file="src/db/session.py",
+        fix_snippet="pool_size=20",
+    )
+    session_factory = _make_session_factory(db_session)
+
+    with (
+        patch("src.agents.nodes.heal_suggester.ChatAnthropic", mock_llm_cls),
+        patch(
+            "src.agents.nodes.heal_suggester.get_session_factory",
+            return_value=session_factory,
+        ),
+    ):
+        result = await heal_suggester_node(state)
+
+    assert result["heal_suggestion"] is not None
+
+    # Only the LLM call for failure_with_rc happened.
+    chain_mock = mock_llm_cls.return_value.with_structured_output.return_value
+    assert chain_mock.ainvoke.await_count == 1
+
+    records_with_rc = await HealSuggestionRepository().get_by_failure_id(
+        db_session, failure_with_rc.id
+    )
+    records_without_rc = await HealSuggestionRepository().get_by_failure_id(
+        db_session, failure_without_rc.id
+    )
+    assert len(records_with_rc) == 1
+    assert records_without_rc == []
+
+
 async def test_heal_suggester_skip_no_root_cause(db_session: AsyncSession):
     """Node skips and returns heal_suggestion=None when root_cause is None."""
     state = {

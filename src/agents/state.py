@@ -49,7 +49,13 @@ class TriageState(TypedDict):
     notification_sent: bool
 
     # Set by root_cause node (Phase 3)
-    root_cause: dict | None
+    root_cause: dict | None         # result for the LAST failure (back-compat)
+    # Per-failure root cause results keyed by failure_id (str UUID), so
+    # downstream nodes that loop over state['failure_ids'] can look up THIS
+    # failure's own root cause rather than the shared 'root_cause' (last)
+    # field, which would otherwise leak the wrong failure's data in
+    # multi-failure runs.
+    root_causes: dict[str, dict]
 
     # Set by heal_suggester node (Phase 3)
     heal_suggestion: dict | None
@@ -114,6 +120,7 @@ def initial_state(pipeline_event_id: str) -> TriageState:
         notification_sent=False,
         # root_cause outputs (Phase 3)
         root_cause=None,
+        root_causes={},
         # heal_suggester outputs (Phase 3)
         heal_suggestion=None,
         # rerun_trigger outputs (Phase 3)

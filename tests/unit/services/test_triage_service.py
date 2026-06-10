@@ -5,13 +5,16 @@ Covers:
   - run_triage logs the pipeline_event_id at completion
   - run_triage propagates exceptions raised by triage_graph.ainvoke
   - run_triage handles is_duplicate=True result and logs it correctly
+  - run_triage marks each failure_id in the result as "triaged"
 
-triage_graph.ainvoke and _update_pipeline_status are patched for all tests —
-no real LangGraph execution or database access occurs.
+triage_graph.ainvoke, _update_pipeline_status, and _mark_failures_triaged are
+patched for all tests — no real LangGraph execution or database access occurs.
 """
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, patch
+import uuid
+from contextlib import asynccontextmanager
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -23,6 +26,13 @@ from src.services.triage_service import run_triage
 # invocation, return value, and log output.
 _PATCH_DB_UPDATE = patch(
     "src.services.triage_service._update_pipeline_status",
+    new=AsyncMock(return_value=None),
+)
+
+# Patch _mark_failures_triaged across all tests so no DB connection is attempted.
+# The function is tested separately (see test_run_triage_marks_failures_triaged).
+_PATCH_MARK_TRIAGED = patch(
+    "src.services.triage_service._mark_failures_triaged",
     new=AsyncMock(return_value=None),
 )
 
@@ -61,7 +71,7 @@ async def test_run_triage_returns_final_state():
     """run_triage returns the full final TriageState dict from triage_graph.ainvoke."""
     expected = _make_final_state()
 
-    with _PATCH_DB_UPDATE, patch(
+    with _PATCH_DB_UPDATE, _PATCH_MARK_TRIAGED, patch(
         "src.services.triage_service.triage_graph",
         ainvoke=AsyncMock(return_value=expected),
     ):
@@ -98,7 +108,7 @@ async def test_run_triage_logs_completion(
         {"failure_ids": ["cccc-3333"], "is_duplicate": False, "errors": []}
     )
 
-    with _PATCH_DB_UPDATE, patch(
+    with _PATCH_DB_UPDATE, _PATCH_MARK_TRIAGED, patch(
         "src.services.triage_service.triage_graph",
         ainvoke=AsyncMock(return_value=final_state),
     ):
@@ -119,7 +129,7 @@ async def test_run_triage_logs_completion(
 
 async def test_run_triage_propagates_graph_errors():
     """run_triage does not swallow exceptions raised by triage_graph.ainvoke."""
-    with _PATCH_DB_UPDATE, patch(
+    with _PATCH_DB_UPDATE, _PATCH_MARK_TRIAGED, patch(
         "src.services.triage_service.triage_graph",
         ainvoke=AsyncMock(side_effect=RuntimeError("graph execution failed")),
     ), pytest.raises(RuntimeError, match="graph execution failed"):
@@ -145,7 +155,7 @@ async def test_run_triage_handles_duplicate_result(
         }
     )
 
-    with _PATCH_DB_UPDATE, patch(
+    with _PATCH_DB_UPDATE, _PATCH_MARK_TRIAGED, patch(
         "src.services.triage_service.triage_graph",
         ainvoke=AsyncMock(return_value=duplicate_state),
     ):
@@ -158,3 +168,65 @@ async def test_run_triage_handles_duplicate_result(
     combined = capfd.readouterr().out + caplog.text
     assert "triage_service.completed" in combined
     assert "is_duplicate" in combined
+
+
+# ===========================================================================
+# Test 5 — run_triage marks each failure_id in the result as "triaged"
+# ===========================================================================
+
+
+async def test_run_triage_marks_failures_triaged():
+    """run_triage's _mark_failures_triaged helper updates each failure_id in
+    result["failure_ids"] to status="triaged" via FailureRepository.update_status,
+    mirroring how _update_pipeline_status updates the pipeline event.
+
+    _mark_failures_triaged is NOT patched here (unlike the other tests) so we
+    can verify its DB-facing behavior; instead FailureRepository and the
+    session factory are mocked, matching the existing mocking style for
+    _update_pipeline_status's own dedicated tests.
+    """
+    failure_id_a = str(uuid.uuid4())
+    failure_id_b = str(uuid.uuid4())
+
+    final_state = _make_final_state(
+        {"failure_ids": [failure_id_a, failure_id_b], "is_duplicate": False, "errors": []}
+    )
+
+    mock_session = AsyncMock()
+    mock_failure_repo = MagicMock()
+    mock_failure_repo.update_status = AsyncMock(return_value=None)
+
+    @asynccontextmanager
+    async def _ctx():
+        yield mock_session
+
+    def _session_factory():
+        return _ctx()
+
+    with (
+        _PATCH_DB_UPDATE,
+        patch(
+            "src.services.triage_service.triage_graph",
+            ainvoke=AsyncMock(return_value=final_state),
+        ),
+        patch(
+            "src.services.triage_service.get_session_factory",
+            return_value=_session_factory,
+        ),
+        patch(
+            "src.services.triage_service.FailureRepository",
+            return_value=mock_failure_repo,
+        ),
+    ):
+        result = await run_triage(_PIPELINE_EVENT_ID)
+
+    assert result["failure_ids"] == [failure_id_a, failure_id_b]
+    assert mock_failure_repo.update_status.await_count == 2
+
+    updated_ids = {
+        str(call.args[1]) for call in mock_failure_repo.update_status.call_args_list
+    }
+    assert updated_ids == {failure_id_a, failure_id_b}
+
+    for call in mock_failure_repo.update_status.call_args_list:
+        assert call.args[2] == "triaged"

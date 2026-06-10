@@ -57,7 +57,10 @@ async def root_cause_node(state: TriageState) -> dict:
     Downstream nodes (ticket_creator, heal_suggester) consume it from state.
 
     Returns a partial state dict with 'root_cause' set to the last result's
-    model_dump(), or None if all failures failed analysis.
+    model_dump() (or None if all failures failed analysis), and 'root_causes'
+    mapping every successfully-analyzed failure_id to its own result (so
+    downstream nodes can look up each failure's own root cause instead of
+    relying on the shared 'root_cause' field).
     """
     log = logger.bind(
         node="root_cause",
@@ -83,6 +86,7 @@ async def root_cause_node(state: TriageState) -> dict:
 
     last_result: RootCauseResult | None = None
     classifications: dict[str, dict] = state.get("classifications") or {}
+    root_causes: dict[str, dict] = {}
     errors: list[str] = list(state["errors"])
 
     for failure_id in state["failure_ids"]:
@@ -150,6 +154,7 @@ async def root_cause_node(state: TriageState) -> dict:
                 await session.commit()
 
                 last_result = result
+                root_causes[failure_id] = result.model_dump()
                 log.info(
                     "root_cause.analyzed",
                     failure_id=failure_id,
@@ -185,5 +190,6 @@ async def root_cause_node(state: TriageState) -> dict:
 
     return {
         "root_cause": last_result.model_dump() if last_result else None,
+        "root_causes": root_causes,
         "errors": errors,
     }
