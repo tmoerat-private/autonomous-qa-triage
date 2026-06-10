@@ -4,8 +4,10 @@ import uuid
 
 import structlog
 
+from src.agents.nodes.run_tracking import finish_agent_run, record_agent_runs, start_agent_run
 from src.agents.prompts.ticket_prompt import format_ticket_summary
 from src.agents.state import TriageState
+from src.config.constants import AgentRunStatus
 from src.config.settings import get_settings
 from src.db.repositories.classification_repo import ClassificationRepository
 from src.db.repositories.failure_repo import FailureRepository
@@ -40,9 +42,18 @@ async def ticket_creator_node(state: TriageState) -> dict:
     log = logger.bind(node="ticket_creator", pipeline_event_id=state["pipeline_event_id"])
     log.info("ticket_creator.started")
 
+    session_factory = get_session_factory()
+
     # Guard 1: skip duplicates — no new ticket needed
     if state.get("is_duplicate", False):
         log.warning("ticket_creator.skipped_duplicate")
+        await record_agent_runs(
+            session_factory,
+            state["failure_ids"],
+            agent_name="ticket_creator",
+            status=AgentRunStatus.SKIPPED,
+            output_summary="Skipped: failure is a duplicate, no new ticket needed",
+        )
         return {"ticket_id": None, "ticket_url": None}
 
     # Guard 2: nothing to process
@@ -53,14 +64,21 @@ async def ticket_creator_node(state: TriageState) -> dict:
     settings = get_settings()
     if not settings.jira_url:
         log.warning("ticket_creator.jira_not_configured")
+        await record_agent_runs(
+            session_factory,
+            state["failure_ids"],
+            agent_name="ticket_creator",
+            status=AgentRunStatus.SKIPPED,
+            output_summary="Skipped: Jira integration not configured",
+        )
         return {"ticket_id": None, "ticket_url": None}
 
-    session_factory = get_session_factory()
     last_ticket_key: str | None = None
     last_ticket_url: str | None = None
     errors: list[str] = list(state["errors"])
 
     for failure_id in state["failure_ids"]:
+        agent_run_id: uuid.UUID | None = None
         try:
             async with session_factory() as session:
                 failure = await FailureRepository().get_by_id(session, uuid.UUID(failure_id))
@@ -75,6 +93,16 @@ async def ticket_creator_node(state: TriageState) -> dict:
                 category = classification.category if classification else "product_bug"
                 confidence = classification.confidence if classification else 0.5
                 reasoning = classification.reasoning if classification else None
+
+                agent_run_id = await start_agent_run(
+                    session_factory,
+                    test_failure_id=failure.id,
+                    agent_name="ticket_creator",
+                    input_summary=(
+                        f"Test: {failure.test_name}\n"
+                        f"Category: {category} (confidence {confidence:.2f})"
+                    ),
+                )
 
                 summary = format_ticket_summary(failure.test_name, category)
                 description = build_ticket_description(
@@ -117,11 +145,25 @@ async def ticket_creator_node(state: TriageState) -> dict:
                     ticket_key=last_ticket_key,
                     priority=priority,
                 )
+                await finish_agent_run(
+                    session_factory,
+                    agent_run_id,
+                    status=AgentRunStatus.COMPLETED,
+                    output_summary=(
+                        f"Created Jira ticket {ticket_data['key']} (priority={priority})"
+                    ),
+                )
 
         except Exception as exc:
             msg = f"ticket_creator: error for {failure_id}: {exc}"
             log.warning("ticket_creator.error", failure_id=failure_id, error=str(exc))
             errors.append(msg)
+            await finish_agent_run(
+                session_factory,
+                agent_run_id,
+                status=AgentRunStatus.FAILED,
+                output_summary=str(exc),
+            )
 
     log.info("ticket_creator.complete")
     return {"ticket_id": last_ticket_key, "ticket_url": last_ticket_url, "errors": errors}

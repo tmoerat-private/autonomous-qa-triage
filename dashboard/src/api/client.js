@@ -63,13 +63,13 @@ export function getScreenshotFileUrl(screenshotId) {
 }
 
 export async function getAgentRuns(limit = 50) {
-  const res = await api.get('/api/v1/agents/runs', { params: { limit } })
-  return res.data
+  const res = await api.get('/api/v1/agent-runs', { params: { limit } })
+  return res.data.items
 }
 
 export async function getAgentRunsForFailure(failureId) {
-  const res = await api.get('/api/v1/agents/runs', { params: { failure_id: failureId } })
-  return res.data
+  const res = await api.get('/api/v1/agent-runs', { params: { test_failure_id: failureId, limit: 100 } })
+  return res.data.items
 }
 
 export async function getReleaseScores(limit = 20) {

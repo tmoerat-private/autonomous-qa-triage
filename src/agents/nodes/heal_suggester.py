@@ -7,8 +7,14 @@ from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import HumanMessage, SystemMessage
 from pydantic import BaseModel, Field
 
+from src.agents.nodes.run_tracking import (
+    finish_agent_run,
+    record_agent_runs,
+    start_agent_run,
+)
 from src.agents.prompts.heal_suggester_prompt import HEAL_SUGGESTER_SYSTEM_PROMPT
 from src.agents.state import TriageState
+from src.config.constants import AgentRunStatus
 from src.config.settings import get_settings
 from src.db.repositories.failure_repo import FailureRepository
 from src.db.repositories.heal_suggestion_repo import HealSuggestionRepository
@@ -63,18 +69,35 @@ async def heal_suggester_node(state: TriageState) -> dict:
     )
     log.info("heal_suggester.started")
 
+    session_factory = get_session_factory()
+
     # --- Skip conditions ---
     root_cause: dict | None = state.get("root_cause")
     if root_cause is None:
         log.info("heal_suggester.skipped", reason="root_cause_missing")
+        await record_agent_runs(
+            session_factory,
+            state["failure_ids"],
+            agent_name="heal_suggester",
+            status=AgentRunStatus.SKIPPED,
+            output_summary="Skipped: no root cause analysis available",
+        )
         return {"heal_suggestion": None}
 
     classification = state.get("classification") or {}
     if classification.get("confidence", 0) < 0.8:
+        confidence = classification.get("confidence", 0)
         log.info(
             "heal_suggester.skipped",
             reason="classification_confidence_too_low",
-            confidence=classification.get("confidence", 0),
+            confidence=confidence,
+        )
+        await record_agent_runs(
+            session_factory,
+            state["failure_ids"],
+            agent_name="heal_suggester",
+            status=AgentRunStatus.SKIPPED,
+            output_summary=f"Skipped: classification confidence {confidence:.2f} < 0.8",
         )
         return {"heal_suggestion": None}
 
@@ -86,7 +109,6 @@ async def heal_suggester_node(state: TriageState) -> dict:
         }
 
     settings = get_settings()
-    session_factory = get_session_factory()
 
     llm = ChatAnthropic(
         model=settings.default_model,
@@ -98,6 +120,7 @@ async def heal_suggester_node(state: TriageState) -> dict:
     errors: list[str] = list(state["errors"])
 
     for failure_id in state["failure_ids"]:
+        agent_run_id: uuid.UUID | None = None
         try:
             async with session_factory() as session:
                 failure = await FailureRepository().get_by_id(
@@ -108,6 +131,16 @@ async def heal_suggester_node(state: TriageState) -> dict:
                     log.warning("heal_suggester.failure_not_found", failure_id=failure_id)
                     errors.append(msg)
                     continue
+
+                agent_run_id = await start_agent_run(
+                    session_factory,
+                    test_failure_id=failure.id,
+                    agent_name="heal_suggester",
+                    input_summary=(
+                        f"Test: {failure.test_name}\n"
+                        f"Root cause: {root_cause['root_cause_summary']}"
+                    ),
+                )
 
                 likely_files = ", ".join(root_cause["likely_cause_files"]) or "unknown"
                 user_message = (
@@ -147,6 +180,16 @@ async def heal_suggester_node(state: TriageState) -> dict:
                     confidence=result.confidence,
                     affected_file=result.affected_file,
                 )
+                await finish_agent_run(
+                    session_factory,
+                    agent_run_id,
+                    status=AgentRunStatus.COMPLETED,
+                    output_summary=(
+                        f"confidence={result.confidence:.2f} "
+                        f"affected_file={result.affected_file or 'unknown'}\n"
+                        f"{result.suggestion}"
+                    ),
+                )
 
         except Exception as exc:
             msg = f"heal_suggester: error processing {failure_id}: {exc}"
@@ -156,6 +199,12 @@ async def heal_suggester_node(state: TriageState) -> dict:
                 error=str(exc),
             )
             errors.append(msg)
+            await finish_agent_run(
+                session_factory,
+                agent_run_id,
+                status=AgentRunStatus.FAILED,
+                output_summary=str(exc),
+            )
 
     log.info("heal_suggester.complete")
 

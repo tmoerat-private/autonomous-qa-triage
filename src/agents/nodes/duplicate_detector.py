@@ -5,8 +5,10 @@ import uuid
 import structlog
 
 from src.agents.nodes.log_analyzer import compute_signature, normalize_error
+from src.agents.nodes.run_tracking import finish_agent_run, start_agent_run
 from src.agents.state import TriageState
 from src.agents.tools.vector_tools import find_similar_errors, store_error_embedding
+from src.config.constants import AgentRunStatus
 from src.config.settings import get_settings
 from src.db.repositories.error_signature_repo import ErrorSignatureRepository
 from src.db.repositories.failure_repo import FailureRepository
@@ -52,6 +54,7 @@ async def duplicate_detector_node(state: TriageState) -> dict:
     errors: list[str] = list(state["errors"])
 
     for failure_id in state["failure_ids"]:
+        agent_run_id: uuid.UUID | None = None
         try:
             async with session_factory() as session:
                 failure = await FailureRepository().get_by_id(
@@ -69,6 +72,13 @@ async def duplicate_detector_node(state: TriageState) -> dict:
                 error_text = (failure.error_message or "") + "\n" + (failure.stack_trace or "")
                 sig_hash = compute_signature(error_text)
                 normalized = normalize_error(error_text)
+
+                agent_run_id = await start_agent_run(
+                    session_factory,
+                    test_failure_id=failure.id,
+                    agent_name="duplicate_detector",
+                    input_summary=f"Test: {failure.test_name}\nSignature: {sig_hash}",
+                )
 
                 # --- Phase 1: exact hash match ---
                 sig, is_dup = await ErrorSignatureRepository().get_or_create(
@@ -111,6 +121,12 @@ async def duplicate_detector_node(state: TriageState) -> dict:
                             failure_id=failure_id,
                             error=str(embed_exc),
                         )
+                    await finish_agent_run(
+                        session_factory,
+                        agent_run_id,
+                        status=AgentRunStatus.COMPLETED,
+                        output_summary=f"Exact duplicate of error_signature {sig.id}",
+                    )
                     continue
 
                 # --- Phase 2: vector similarity search BEFORE storing embedding ---
@@ -172,6 +188,18 @@ async def duplicate_detector_node(state: TriageState) -> dict:
                     sig_hash=sig_hash,
                     is_duplicate=is_dup or bool(similar),
                 )
+                if similar:
+                    output_summary = (
+                        f"Vector match: {similar[0]['id']} (score={similar[0]['score']:.3f})"
+                    )
+                else:
+                    output_summary = "No exact or vector duplicate found; new signature recorded"
+                await finish_agent_run(
+                    session_factory,
+                    agent_run_id,
+                    status=AgentRunStatus.COMPLETED,
+                    output_summary=output_summary,
+                )
 
         except Exception as exc:
             msg = f"duplicate_detector: error processing {failure_id}: {exc}"
@@ -181,6 +209,12 @@ async def duplicate_detector_node(state: TriageState) -> dict:
                 error=str(exc),
             )
             errors.append(msg)
+            await finish_agent_run(
+                session_factory,
+                agent_run_id,
+                status=AgentRunStatus.FAILED,
+                output_summary=str(exc),
+            )
 
     log.info(
         "duplicate_detector.complete",

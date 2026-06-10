@@ -4,7 +4,9 @@ import uuid
 
 import structlog
 
+from src.agents.nodes.run_tracking import record_agent_runs
 from src.agents.state import TriageState
+from src.config.constants import AgentRunStatus
 from src.config.settings import get_settings
 from src.db.repositories.pipeline_repo import PipelineEventRepository
 from src.db.repositories.rerun_repo import RerunRepository
@@ -42,20 +44,34 @@ async def rerun_trigger_node(state: TriageState) -> dict:
         enable_auto_rerun=settings.enable_auto_rerun,
     )
 
+    session_factory = get_session_factory()
+
     # --- Skip conditions ---
     if state.get("is_flaky") is not True:
         log.warning("rerun_trigger.skipped", reason="not_flaky")
+        await record_agent_runs(
+            session_factory,
+            state["failure_ids"],
+            agent_name="rerun_trigger",
+            status=AgentRunStatus.SKIPPED,
+            output_summary="Skipped: test not flagged as flaky",
+        )
         return {"rerun_triggered": False, "rerun_job_id": None}
 
     if settings.enable_auto_rerun is not True:
         log.warning("rerun_trigger.skipped", reason="enable_auto_rerun_disabled")
+        await record_agent_runs(
+            session_factory,
+            state["failure_ids"],
+            agent_name="rerun_trigger",
+            status=AgentRunStatus.SKIPPED,
+            output_summary="Skipped: auto-rerun feature is disabled",
+        )
         return {"rerun_triggered": False, "rerun_job_id": None}
 
     errors: list[str] = list(state["errors"])
 
     try:
-        session_factory = get_session_factory()
-
         async with session_factory() as session:
             event = await PipelineEventRepository().get_by_id(
                 session, uuid.UUID(state["pipeline_event_id"])
@@ -65,6 +81,13 @@ async def rerun_trigger_node(state: TriageState) -> dict:
                     "rerun_trigger.skipped",
                     reason="pipeline_event_not_found",
                     pipeline_event_id=state["pipeline_event_id"],
+                )
+                await record_agent_runs(
+                    session_factory,
+                    state["failure_ids"],
+                    agent_name="rerun_trigger",
+                    status=AgentRunStatus.SKIPPED,
+                    output_summary="Skipped: pipeline event not found",
                 )
                 return {"rerun_triggered": False, "rerun_job_id": None, "errors": errors}
 
@@ -97,6 +120,13 @@ async def rerun_trigger_node(state: TriageState) -> dict:
                     reason="unsupported_provider",
                     provider=provider,
                 )
+                await record_agent_runs(
+                    session_factory,
+                    state["failure_ids"],
+                    agent_name="rerun_trigger",
+                    status=AgentRunStatus.SKIPPED,
+                    output_summary=f"Skipped: unsupported CI provider '{provider}'",
+                )
                 return {"rerun_triggered": False, "rerun_job_id": None, "errors": errors}
 
             log.info(
@@ -121,7 +151,22 @@ async def rerun_trigger_node(state: TriageState) -> dict:
         msg = f"rerun_trigger: error: {exc}"
         log.warning("rerun_trigger.error", error=str(exc))
         errors.append(msg)
+        await record_agent_runs(
+            session_factory,
+            state["failure_ids"],
+            agent_name="rerun_trigger",
+            status=AgentRunStatus.FAILED,
+            output_summary=str(exc),
+        )
         return {"rerun_triggered": False, "rerun_job_id": None, "errors": errors}
+
+    await record_agent_runs(
+        session_factory,
+        state["failure_ids"],
+        agent_name="rerun_trigger",
+        status=AgentRunStatus.COMPLETED,
+        output_summary=f"Triggered rerun via {provider} (job_id={triggered_job_id})",
+    )
 
     return {
         "rerun_triggered": True,

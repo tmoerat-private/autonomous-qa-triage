@@ -20,8 +20,9 @@ import uuid
 
 import structlog
 
+from src.agents.nodes.run_tracking import finish_agent_run, start_agent_run
 from src.agents.state import TriageState
-from src.config.constants import FLAKY_MIN_SAMPLE_SIZE
+from src.config.constants import FLAKY_MIN_SAMPLE_SIZE, AgentRunStatus
 from src.config.settings import get_settings
 from src.db.repositories.failure_repo import FailureRepository
 from src.db.repositories.flakiness_repo import FlakynessRepository
@@ -97,6 +98,7 @@ async def flaky_detector_node(state: TriageState) -> dict:
     flaky_max: float = settings.flaky_max_failure_rate
 
     for failure_id in state["failure_ids"]:
+        agent_run_id: uuid.UUID | None = None
         try:
             async with session_factory() as session:
                 failure = await failure_repo.get_by_id(
@@ -111,8 +113,15 @@ async def flaky_detector_node(state: TriageState) -> dict:
                     errors.append(msg)
                     continue
 
-                test_name: str = failure.test_name
+                test_name = failure.test_name
                 repository: str | None = state.get("repository")
+
+                agent_run_id = await start_agent_run(
+                    session_factory,
+                    test_failure_id=failure.id,
+                    agent_name="flaky_detector",
+                    input_summary=f"Test: {test_name}",
+                )
 
                 # --- Gather statistical evidence ---
                 failure_count: int = await flakiness_repo.get_failure_count_for_test(
@@ -128,6 +137,15 @@ async def flaky_detector_node(state: TriageState) -> dict:
                         test_name=test_name,
                         failure_count=failure_count,
                         min_required=FLAKY_MIN_SAMPLE_SIZE,
+                    )
+                    await finish_agent_run(
+                        session_factory,
+                        agent_run_id,
+                        status=AgentRunStatus.SKIPPED,
+                        output_summary=(
+                            f"Skipped: only {failure_count} sample(s), "
+                            f"need {FLAKY_MIN_SAMPLE_SIZE}"
+                        ),
                     )
                     continue
 
@@ -172,6 +190,16 @@ async def flaky_detector_node(state: TriageState) -> dict:
                         retry_rate=round(retry_rate, 4),
                     )
 
+                await finish_agent_run(
+                    session_factory,
+                    agent_run_id,
+                    status=AgentRunStatus.COMPLETED,
+                    output_summary=(
+                        f"flakiness_score={score:.2f} (threshold={score_threshold}) "
+                        f"failure_rate={failure_rate:.2f} retry_rate={retry_rate:.2f}"
+                    ),
+                )
+
         except Exception as exc:
             msg = f"flaky_detector: error processing {failure_id}: {exc}"
             log.warning(
@@ -180,6 +208,12 @@ async def flaky_detector_node(state: TriageState) -> dict:
                 error=str(exc),
             )
             errors.append(msg)
+            await finish_agent_run(
+                session_factory,
+                agent_run_id,
+                status=AgentRunStatus.FAILED,
+                output_summary=str(exc),
+            )
 
     is_flaky = len(flaky_test_names) > 0
 

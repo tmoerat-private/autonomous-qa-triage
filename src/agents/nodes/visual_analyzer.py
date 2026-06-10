@@ -9,8 +9,10 @@ from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import HumanMessage, SystemMessage
 from pydantic import BaseModel, Field
 
+from src.agents.nodes.run_tracking import record_agent_runs
 from src.agents.prompts.visual_analyzer_prompt import VISUAL_ANALYZER_SYSTEM_PROMPT
 from src.agents.state import TriageState
+from src.config.constants import AgentRunStatus
 from src.config.settings import get_settings
 from src.db.repositories.screenshot_repo import ScreenshotRepository
 from src.db.session import get_session_factory
@@ -72,6 +74,13 @@ async def visual_analyzer_node(state: TriageState) -> dict:
 
     if not all_screenshots:
         log.info("visual_analyzer.skipped", reason="no_screenshots")
+        await record_agent_runs(
+            session_factory,
+            state["failure_ids"],
+            agent_name="visual_analyzer",
+            status=AgentRunStatus.SKIPPED,
+            output_summary="Skipped: no screenshots found for any failure in this run",
+        )
         return {"visual_analysis": None, "screenshot_ids": []}
 
     # --- Phase 2: Load image bytes from disk (outside the DB session) ---
@@ -87,6 +96,13 @@ async def visual_analyzer_node(state: TriageState) -> dict:
         valid_bytes.append(path.read_bytes())
 
     if not valid_screenshots:
+        await record_agent_runs(
+            session_factory,
+            state["failure_ids"],
+            agent_name="visual_analyzer",
+            status=AgentRunStatus.SKIPPED,
+            output_summary="Skipped: screenshot files missing from disk",
+        )
         return {"visual_analysis": None, "screenshot_ids": [], "errors": errors}
 
     # --- Phase 3: Call Claude with structured output ---
@@ -136,6 +152,16 @@ async def visual_analyzer_node(state: TriageState) -> dict:
             confidence=result.confidence,
             screenshot_count=len(valid_screenshots),
         )
+        await record_agent_runs(
+            session_factory,
+            state["failure_ids"],
+            agent_name="visual_analyzer",
+            status=AgentRunStatus.COMPLETED,
+            output_summary=(
+                f"has_regression={result.has_regression} confidence={result.confidence:.2f}\n"
+                f"{result.comparison_note}"
+            ),
+        )
 
         return {
             "visual_analysis": result.model_dump(),
@@ -146,4 +172,11 @@ async def visual_analyzer_node(state: TriageState) -> dict:
     except Exception as exc:
         log.warning("visual_analyzer.error", error=str(exc))
         errors.append(f"visual_analyzer: {exc}")
+        await record_agent_runs(
+            session_factory,
+            state["failure_ids"],
+            agent_name="visual_analyzer",
+            status=AgentRunStatus.FAILED,
+            output_summary=str(exc),
+        )
         return {"visual_analysis": None, "screenshot_ids": [], "errors": errors}

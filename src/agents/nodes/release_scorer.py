@@ -7,8 +7,10 @@ from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import HumanMessage, SystemMessage
 from sqlalchemy import select
 
+from src.agents.nodes.run_tracking import record_agent_runs
 from src.agents.prompts.release_scorer_prompt import RELEASE_SCORER_SYSTEM_PROMPT
 from src.agents.state import TriageState
+from src.config.constants import AgentRunStatus
 from src.config.settings import get_settings
 from src.db.repositories.pipeline_repo import PipelineEventRepository
 from src.db.repositories.release_score_repo import ReleaseScoreRepository
@@ -67,6 +69,13 @@ async def release_scorer_node(state: TriageState) -> dict:
             )
             if event is None or not event.commit_sha:
                 log.warning("release_scorer.skipped", reason="no_commit_sha")
+                await record_agent_runs(
+                    session_factory,
+                    state["failure_ids"],
+                    agent_name="release_scorer",
+                    status=AgentRunStatus.SKIPPED,
+                    output_summary="Skipped: pipeline event has no commit_sha",
+                )
                 return {"release_score": None, "errors": errors}
 
             commit_sha = event.commit_sha
@@ -202,6 +211,16 @@ async def release_scorer_node(state: TriageState) -> dict:
             )
             await session.commit()
 
+        await record_agent_runs(
+            session_factory,
+            state["failure_ids"],
+            agent_name="release_scorer",
+            status=AgentRunStatus.COMPLETED,
+            output_summary=(
+                f"score={score:.0f}/100 ({risk_level})\n{risk_summary}"
+            ),
+        )
+
         return {
             "release_score": {
                 "score": score,
@@ -217,4 +236,11 @@ async def release_scorer_node(state: TriageState) -> dict:
         msg = f"release_scorer: error: {exc}"
         log.warning("release_scorer.error", error=str(exc))
         errors.append(msg)
+        await record_agent_runs(
+            session_factory,
+            state["failure_ids"],
+            agent_name="release_scorer",
+            status=AgentRunStatus.FAILED,
+            output_summary=str(exc),
+        )
         return {"release_score": None, "errors": errors}

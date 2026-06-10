@@ -7,8 +7,10 @@ from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import HumanMessage, SystemMessage
 from pydantic import BaseModel, Field
 
+from src.agents.nodes.run_tracking import finish_agent_run, start_agent_run
 from src.agents.prompts.root_cause_prompt import ROOT_CAUSE_SYSTEM_PROMPT
 from src.agents.state import TriageState
+from src.config.constants import AgentRunStatus
 from src.config.settings import get_settings
 from src.db.repositories.failure_repo import FailureRepository
 from src.db.repositories.root_cause_repo import RootCauseRepository
@@ -82,6 +84,7 @@ async def root_cause_node(state: TriageState) -> dict:
     errors: list[str] = list(state["errors"])
 
     for failure_id in state["failure_ids"]:
+        agent_run_id: uuid.UUID | None = None
         try:
             async with session_factory() as session:
                 failure = await FailureRepository().get_by_id(
@@ -92,6 +95,16 @@ async def root_cause_node(state: TriageState) -> dict:
                     log.warning("root_cause.failure_not_found", failure_id=failure_id)
                     errors.append(msg)
                     continue
+
+                agent_run_id = await start_agent_run(
+                    session_factory,
+                    test_failure_id=failure.id,
+                    agent_name="root_cause",
+                    input_summary=(
+                        f"Test: {failure.test_name}\n"
+                        f"Error: {(failure.error_message or 'N/A')[:200]}"
+                    ),
+                )
 
                 classification = state.get("classification")
                 clf_category = classification["category"] if classification else "unknown"
@@ -133,6 +146,15 @@ async def root_cause_node(state: TriageState) -> dict:
                     failure_id=failure_id,
                     root_cause_category=result.root_cause_category,
                 )
+                await finish_agent_run(
+                    session_factory,
+                    agent_run_id,
+                    status=AgentRunStatus.COMPLETED,
+                    output_summary=(
+                        f"category={result.root_cause_category}\n"
+                        f"{result.root_cause_summary}"
+                    ),
+                )
 
         except Exception as exc:
             msg = f"root_cause: error processing {failure_id}: {exc}"
@@ -143,6 +165,12 @@ async def root_cause_node(state: TriageState) -> dict:
             )
             errors.append(msg)
             last_result = None
+            await finish_agent_run(
+                session_factory,
+                agent_run_id,
+                status=AgentRunStatus.FAILED,
+                output_summary=str(exc),
+            )
 
     log.info("root_cause.complete")
 

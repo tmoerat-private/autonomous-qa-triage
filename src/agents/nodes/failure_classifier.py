@@ -8,9 +8,11 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from pydantic import BaseModel, Field
 
 from src.agents.nodes.log_analyzer import normalize_error
+from src.agents.nodes.run_tracking import finish_agent_run, start_agent_run
 from src.agents.prompts.classifier_prompt import CLASSIFIER_SYSTEM_PROMPT
 from src.agents.state import TriageState
 from src.agents.tools.vector_tools import find_similar_outcomes
+from src.config.constants import AgentRunStatus
 from src.config.settings import get_settings
 from src.db.repositories.classification_repo import ClassificationRepository
 from src.db.repositories.failure_repo import FailureRepository
@@ -69,6 +71,7 @@ async def failure_classifier_node(state: TriageState) -> dict:
     errors: list[str] = list(state["errors"])
 
     for failure_id in state["failure_ids"]:
+        agent_run_id: uuid.UUID | None = None
         try:
             async with session_factory() as session:
                 failure = await FailureRepository().get_by_id(
@@ -79,6 +82,16 @@ async def failure_classifier_node(state: TriageState) -> dict:
                     log.warning("failure_classifier.failure_not_found", failure_id=failure_id)
                     errors.append(msg)
                     continue
+
+                agent_run_id = await start_agent_run(
+                    session_factory,
+                    test_failure_id=failure.id,
+                    agent_name="failure_classifier",
+                    input_summary=(
+                        f"Test: {failure.test_name}\n"
+                        f"Error: {(failure.error_message or 'N/A')[:200]}"
+                    ),
+                )
 
                 # --- Dynamic few-shot from Learning & Memory Agent ---
                 dynamic_few_shot = ""
@@ -148,6 +161,15 @@ async def failure_classifier_node(state: TriageState) -> dict:
                     confidence=result.confidence,
                 )
                 CLASSIFICATION_DISTRIBUTION.labels(category=result.category).inc()
+                await finish_agent_run(
+                    session_factory,
+                    agent_run_id,
+                    status=AgentRunStatus.COMPLETED,
+                    output_summary=(
+                        f"category={result.category} confidence={result.confidence:.2f}\n"
+                        f"{result.reasoning}"
+                    ),
+                )
 
         except Exception as exc:
             msg = f"failure_classifier: error processing {failure_id}: {exc}"
@@ -157,6 +179,12 @@ async def failure_classifier_node(state: TriageState) -> dict:
                 error=str(exc),
             )
             errors.append(msg)
+            await finish_agent_run(
+                session_factory,
+                agent_run_id,
+                status=AgentRunStatus.FAILED,
+                output_summary=str(exc),
+            )
 
     log.info(
         "failure_classifier.complete",

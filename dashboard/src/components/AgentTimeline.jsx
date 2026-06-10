@@ -1,21 +1,22 @@
-import React, { useEffect, useState } from 'react'
-import axios from 'axios'
+import React, { useState } from 'react'
 
-const api = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000',
-})
-
-// Human-readable agent name map
+// Human-readable agent name map — keys match the LangGraph node names in
+// src/agents/orchestrator.py.
 const AGENT_LABELS = {
-  failure_classifier:   'Failure Classifier',
-  log_analyzer:         'Log Analyzer',
-  root_cause_analyzer:  'Root Cause Analyzer',
-  ticket_creator:       'Ticket Creator',
-  notification_sender:  'Notification Sender',
-  heal_suggester:       'Heal Suggester',
-  release_risk_scorer:  'Release Risk Scorer',
-  screenshot_analyzer:  'Screenshot Analyzer',
-  orchestrator:         'Orchestrator',
+  pipeline_monitor:    'Pipeline Monitor',
+  failure_classifier:  'Failure Classifier',
+  log_analyzer:        'Log Analyzer',
+  visual_analyzer:     'Visual Analyzer',
+  root_cause:          'Root Cause Analyzer',
+  heal_suggester:      'Heal Suggester',
+  environment_health:  'Environment Health Check',
+  duplicate_detector:  'Duplicate Detector',
+  flaky_detector:      'Flaky Test Detector',
+  rerun_trigger:       'Rerun Trigger',
+  ticket_creator:      'Ticket Creator',
+  notifier:            'Notifier',
+  learner:             'Learner',
+  release_scorer:      'Release Risk Scorer',
 }
 
 function humanizeName(raw) {
@@ -307,35 +308,10 @@ function TotalElapsed({ runs }) {
  * AgentTimeline
  *
  * Props:
- *   failureId  — string | undefined
- *   runs       — array (optional) — if provided, skips internal fetch
- *                (used when parent already has the data via useQuery)
+ *   runs — array of AgentRunItem (defaults to []) — the parent fetches this
+ *          via useQuery (e.g. getAgentRunsForFailure) and passes it down.
  */
-export default function AgentTimeline({ failureId, runs: runsProp }) {
-  const [runs, setRuns] = useState(runsProp || [])
-  const [loading, setLoading] = useState(!runsProp && Boolean(failureId))
-  const [error, setError] = useState(null)
-
-  useEffect(() => {
-    // If parent passed runs directly, use those (no internal fetch needed)
-    if (runsProp !== undefined) {
-      setRuns(runsProp)
-      setLoading(false)
-      return
-    }
-    if (!failureId) return
-
-    setLoading(true)
-    setError(null)
-    api
-      .get('/api/v1/agents/runs', { params: { failure_id: failureId } })
-      .then((res) => setRuns(res.data))
-      .catch((err) =>
-        setError(err?.response?.data?.detail || err.message || 'Failed to load agent runs')
-      )
-      .finally(() => setLoading(false))
-  }, [failureId, runsProp])
-
+export default function AgentTimeline({ runs = [] }) {
   return (
     <div
       style={{
@@ -360,43 +336,13 @@ export default function AgentTimeline({ failureId, runs: runsProp }) {
         Agent Pipeline
       </h2>
 
-      {loading && (
-        <div style={{ display: 'flex', justifyContent: 'center', padding: '24px 0' }}>
-          <div
-            style={{
-              width: 32,
-              height: 32,
-              borderRadius: '50%',
-              border: '3px solid var(--bg-elevated)',
-              borderTopColor: 'var(--accent)',
-              animation: 'tl-spin 0.8s linear infinite',
-            }}
-          />
-        </div>
-      )}
-
-      {error && (
-        <div
-          style={{
-            background: '#3f1515',
-            border: '1px solid var(--danger)',
-            color: '#fca5a5',
-            padding: '10px 14px',
-            borderRadius: 6,
-            fontSize: 13,
-          }}
-        >
-          {error}
-        </div>
-      )}
-
-      {!loading && !error && runs.length === 0 && (
+      {runs.length === 0 && (
         <p style={{ margin: 0, fontSize: 13, color: 'var(--text-muted)' }}>
           No agent runs recorded for this failure.
         </p>
       )}
 
-      {!loading && !error && runs.length > 0 && (
+      {runs.length > 0 && (
         <>
           <div style={{ position: 'relative' }}>
             {runs.map((run, idx) => (

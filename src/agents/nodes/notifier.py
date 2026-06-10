@@ -5,7 +5,13 @@ from datetime import UTC, datetime
 
 import structlog
 
+from src.agents.nodes.run_tracking import (
+    finish_agent_run,
+    record_agent_runs,
+    start_agent_run,
+)
 from src.agents.state import TriageState
+from src.config.constants import AgentRunStatus
 from src.config.settings import get_settings
 from src.db.repositories.classification_repo import ClassificationRepository
 from src.db.repositories.failure_repo import FailureRepository
@@ -39,10 +45,18 @@ async def notifier_node(state: TriageState) -> dict:
     log.info("notifier.started")
 
     settings = get_settings()
+    session_factory = get_session_factory()
 
     # Guard 1: Slack not configured — degrade gracefully
     if not settings.slack_bot_token:
         log.warning("notifier.slack_not_configured")
+        await record_agent_runs(
+            session_factory,
+            state["failure_ids"],
+            agent_name="notifier",
+            status=AgentRunStatus.SKIPPED,
+            output_summary="Skipped: Slack integration not configured",
+        )
         return {"notification_sent": False}
 
     # Guard 2: nothing to process
@@ -50,11 +64,11 @@ async def notifier_node(state: TriageState) -> dict:
         return {"notification_sent": False}
 
     channel_id = settings.slack_channel_id
-    session_factory = get_session_factory()
     notification_sent = False
     errors: list[str] = list(state["errors"])
 
     for failure_id in state["failure_ids"]:
+        agent_run_id: uuid.UUID | None = None
         try:
             async with session_factory() as session:
                 failure = await FailureRepository().get_by_id(session, uuid.UUID(failure_id))
@@ -69,6 +83,13 @@ async def notifier_node(state: TriageState) -> dict:
                 category = classification.category if classification else "unknown"
                 confidence = classification.confidence if classification else 0.0
                 reasoning = classification.reasoning if classification else None
+
+                agent_run_id = await start_agent_run(
+                    session_factory,
+                    test_failure_id=failure.id,
+                    agent_name="notifier",
+                    input_summary=f"Test: {failure.test_name}\nCategory: {category}",
+                )
 
                 message_payload = build_triage_notification(
                     test_name=failure.test_name,
@@ -103,11 +124,23 @@ async def notifier_node(state: TriageState) -> dict:
 
                 notification_sent = True
                 log.info("notifier.sent", failure_id=failure_id, ts=external_message_id)
+                await finish_agent_run(
+                    session_factory,
+                    agent_run_id,
+                    status=AgentRunStatus.COMPLETED,
+                    output_summary=f"Sent Slack notification (ts={external_message_id})",
+                )
 
         except Exception as exc:
             msg = f"notifier: error for {failure_id}: {exc}"
             log.warning("notifier.error", failure_id=failure_id, error=str(exc))
             errors.append(msg)
+            await finish_agent_run(
+                session_factory,
+                agent_run_id,
+                status=AgentRunStatus.FAILED,
+                output_summary=str(exc),
+            )
 
     log.info("notifier.complete", notification_sent=notification_sent)
     return {"notification_sent": notification_sent, "errors": errors}

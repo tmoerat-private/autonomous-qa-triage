@@ -1,10 +1,6 @@
 import React, { useEffect, useState, useMemo } from 'react'
 import { Link } from 'react-router-dom'
-import axios from 'axios'
-
-const api = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000',
-})
+import { getAgentRuns } from '../api/client.js'
 
 function relativeDate(isoString) {
   if (!isoString) return '—'
@@ -95,8 +91,8 @@ export default function Agents() {
   useEffect(() => {
     setLoading(true)
     setError(null)
-    api.get('/api/v1/agents/runs', { params: { limit: 50 } })
-      .then(res => setRuns(res.data))
+    getAgentRuns(50)
+      .then(setRuns)
       .catch(err => setError(err?.response?.data?.detail || err.message || 'Failed to load agent runs'))
       .finally(() => setLoading(false))
   }, [])
@@ -261,13 +257,13 @@ export default function Agents() {
                             {run.tokens_used != null ? run.tokens_used.toLocaleString() : '—'}
                           </td>
                           <td style={tdStyle}>
-                            {run.failure_id ? (
+                            {run.test_failure_id ? (
                               <Link
-                                to={`/failures/${run.failure_id}`}
+                                to={`/failures/${run.test_failure_id}`}
                                 onClick={e => e.stopPropagation()}
                                 style={{ color: 'var(--accent-light)', fontFamily: 'monospace', fontSize: 11 }}
                               >
-                                {String(run.failure_id).slice(0, 8)}…
+                                {String(run.test_failure_id).slice(0, 8)}…
                               </Link>
                             ) : '—'}
                           </td>

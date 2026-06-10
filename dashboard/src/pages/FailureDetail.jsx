@@ -607,7 +607,7 @@ export default function FailureDetail() {
       {agentRunsLoading ? (
         <SkeletonBlock height={200} />
       ) : (
-        <AgentTimeline failureId={id} runs={agentRuns} />
+        <AgentTimeline runs={agentRuns} />
       )}
     </div>
   )
