@@ -57,7 +57,8 @@ class TicketPriority(StrEnum):
 
 
 DEFAULT_MODEL = "claude-sonnet-4-20250514"
-MAX_LOG_LENGTH = 500_000  # chars — real CI runs easily exceed 100K before the pytest FAILED lines appear
+# chars — real CI runs easily exceed 100K before the pytest FAILED lines appear
+MAX_LOG_LENGTH = 500_000
 ERROR_SIGNATURE_VERSION = "v1"
 
 # Phase 2 — vector similarity duplicate detection

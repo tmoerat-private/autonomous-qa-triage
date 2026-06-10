@@ -1,5 +1,36 @@
 from __future__ import annotations
 
+import re
+
+_LABEL_INVALID_CHARS = re.compile(r"[^A-Za-z0-9_-]+")
+
+
+def slugify_label(text: str, max_length: int = 50) -> str:
+    """Convert arbitrary text into a Jira-safe label.
+
+    Jira labels cannot contain whitespace and reject several punctuation
+    characters. Test names — especially Playwright-style names such as
+    ``"[chromium] dark mode toggle"`` — routinely contain spaces, brackets,
+    and other characters that Jira's ``POST /rest/api/3/issue`` endpoint
+    rejects with a 400 (``"The label '...' can't contain spaces."``).
+
+    This collapses any run of characters outside ``[A-Za-z0-9_-]`` into a
+    single hyphen, trims leading/trailing hyphens, and truncates to
+    ``max_length`` characters.
+
+    Args:
+        text: Arbitrary text to convert into a label, e.g. a test name.
+        max_length: Maximum length of the resulting label. Defaults to 50.
+
+    Returns:
+        A non-empty, Jira-safe label string. Falls back to ``"test-failure"``
+        if the input contains no valid characters.
+    """
+    slug = _LABEL_INVALID_CHARS.sub("-", text.strip())
+    slug = re.sub(r"-{2,}", "-", slug).strip("-")
+    slug = slug[:max_length].strip("-")
+    return slug or "test-failure"
+
 
 def map_priority(category: str, confidence: float) -> str:
     """Map a FailureCategory string and confidence score to a Jira priority name.

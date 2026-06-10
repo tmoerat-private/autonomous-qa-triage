@@ -18,7 +18,9 @@ from src.models.test_failure import TestFailure
 # ---------------------------------------------------------------------------
 
 
-async def _make_failure(db_session: AsyncSession) -> TestFailure:
+async def _make_failure(
+    db_session: AsyncSession, test_name: str = "test_checkout_total"
+) -> TestFailure:
     """Insert a PipelineEvent + TestFailure into the test DB and return the failure."""
     event = PipelineEvent(
         provider="jenkins",
@@ -35,7 +37,7 @@ async def _make_failure(db_session: AsyncSession) -> TestFailure:
 
     failure = TestFailure(
         pipeline_event_id=event.id,
-        test_name="test_checkout_total",
+        test_name=test_name,
         error_message="AssertionError: expected 99.99 but got 0.00",
         stack_trace="File checkout.py, line 88\nAssertionError",
         status="new",
@@ -260,6 +262,36 @@ async def test_ticket_creator_no_classification(db_session: AsyncSession):
     # Should have still created a ticket using default category/confidence
     mock_jira_cls.return_value.create_issue.assert_called_once()
     assert result["ticket_id"] == "QA-99"
+
+
+async def test_ticket_creator_sanitizes_label_for_test_name_with_spaces(db_session: AsyncSession):
+    """Playwright-style test names contain spaces, which Jira rejects in labels
+    with a 400 ('The label '...' can't contain spaces.'). The label passed to
+    create_issue must be sanitized via slugify_label()."""
+    failure = await _make_failure(db_session, test_name="dark mode toggle is visible")
+    state = _build_state(failure)
+
+    mock_jira_cls = _make_jira_mock(issue_key="QA-42")
+    session_factory = _make_session_factory(db_session)
+    mock_settings = _make_settings()
+
+    with (
+        patch("src.agents.nodes.ticket_creator.JiraClient", mock_jira_cls),
+        patch(
+            "src.agents.nodes.ticket_creator.get_session_factory",
+            return_value=session_factory,
+        ),
+        patch("src.agents.nodes.ticket_creator.get_settings", return_value=mock_settings),
+    ):
+        result = await ticket_creator_node(state)
+
+    assert result["ticket_id"] == "QA-42"
+
+    call_kwargs = mock_jira_cls.return_value.create_issue.call_args
+    labels = call_kwargs.kwargs["labels"]
+    assert labels == ["autonomous-qa", "test-failure", "dark-mode-toggle-is-visible"]
+    for label in labels:
+        assert " " not in label
 
 
 async def test_ticket_creator_sets_correct_priority(db_session: AsyncSession):

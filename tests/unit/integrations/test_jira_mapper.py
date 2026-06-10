@@ -1,9 +1,10 @@
-"""Tests for map_priority() and build_ticket_description() — pure functions, no async."""
+"""Tests for map_priority(), build_ticket_description(), and slugify_label() —
+pure functions, no async."""
 from __future__ import annotations
 
 import pytest
 
-from src.integrations.jira.mapper import build_ticket_description, map_priority
+from src.integrations.jira.mapper import build_ticket_description, map_priority, slugify_label
 
 # ---------------------------------------------------------------------------
 # map_priority() tests
@@ -143,3 +144,63 @@ def test_long_stack_trace_truncated():
     # The description must still contain some truncated portion
     assert "x" * 3000 in result
     assert "x" * 3001 not in result
+
+
+# ---------------------------------------------------------------------------
+# slugify_label() tests
+# ---------------------------------------------------------------------------
+
+
+def test_slugify_label_replaces_spaces_with_hyphens():
+    assert slugify_label("dark mode toggle") == "dark-mode-toggle"
+
+
+def test_slugify_label_strips_brackets_and_punctuation():
+    """Playwright-style names like '[chromium] dark mode toggle' must not
+    leave brackets or other invalid characters in the label."""
+    result = slugify_label("[chromium] dark mode toggle")
+    assert result == "chromium-dark-mode-toggle"
+    for char in result:
+        assert char.isalnum() or char in {"-", "_"}
+
+
+def test_slugify_label_collapses_consecutive_separators():
+    """Multiple adjacent invalid characters collapse into a single hyphen."""
+    result = slugify_label("Sidebar navigation › dark mode toggle")  # noqa: RUF001
+    assert "--" not in result
+    assert result == "Sidebar-navigation-dark-mode-toggle"
+
+
+def test_slugify_label_strips_leading_and_trailing_hyphens():
+    result = slugify_label("  /weird/ path/ ")
+    assert not result.startswith("-")
+    assert not result.endswith("-")
+
+
+def test_slugify_label_truncates_to_max_length():
+    text = "a" * 100
+    result = slugify_label(text)
+    assert len(result) == 50
+
+
+def test_slugify_label_respects_custom_max_length():
+    result = slugify_label("a-very-long-test-name-here", max_length=10)
+    assert len(result) <= 10
+
+
+def test_slugify_label_truncation_does_not_leave_trailing_hyphen():
+    """If truncation lands mid-separator-run, the trailing hyphen is stripped."""
+    result = slugify_label("a" * 49 + " " + "b" * 10, max_length=50)
+    assert not result.endswith("-")
+
+
+def test_slugify_label_preserves_existing_hyphens_and_underscores():
+    assert slugify_label("test_name-with_mixed-separators") == "test_name-with_mixed-separators"
+
+
+def test_slugify_label_empty_input_falls_back_to_default():
+    assert slugify_label("") == "test-failure"
+
+
+def test_slugify_label_only_invalid_chars_falls_back_to_default():
+    assert slugify_label("///   ›››") == "test-failure"  # noqa: RUF001

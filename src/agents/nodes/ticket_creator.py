@@ -14,7 +14,7 @@ from src.db.repositories.failure_repo import FailureRepository
 from src.db.repositories.ticket_repo import TicketRepository
 from src.db.session import get_session_factory
 from src.integrations.jira.client import JiraClient
-from src.integrations.jira.mapper import build_ticket_description, map_priority
+from src.integrations.jira.mapper import build_ticket_description, map_priority, slugify_label
 
 logger = structlog.get_logger(__name__)
 
@@ -122,7 +122,7 @@ async def ticket_creator_node(state: TriageState) -> dict:
                         summary=summary,
                         description=description,
                         priority=priority,
-                        labels=["autonomous-qa", "test-failure", failure.test_name[:50]],
+                        labels=["autonomous-qa", "test-failure", slugify_label(failure.test_name)],
                     )
 
                 await TicketRepository().create(
